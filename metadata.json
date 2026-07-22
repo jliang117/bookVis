@@ -1,0 +1,6 @@
+{
+  "name": "AI Book Visualizer",
+  "description": "An interactive PDF reader that automatically extracts surrounding text and generates gorgeous AI visualizations of your current reading scene in multiple artistic styles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
