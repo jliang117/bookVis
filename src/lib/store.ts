@@ -37,7 +37,7 @@ const getInitialApiKeys = (): ApiKeys => {
 
 // Helper function to extract scene directly from browser using Gemini API
 async function clientExtractScene(text: string, apiKey: string): Promise<SceneJSON> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
   
   const payload = {
     contents: [
