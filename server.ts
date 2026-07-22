@@ -119,6 +119,8 @@ app.get('/api/health', (req, res) => {
 app.post('/api/extract-scene', async (req, res) => {
   const { text } = req.body;
 
+  console.log('[SERVER DEBUG] Received /api/extract-scene request. Text snippet length:', text?.length || 0);
+
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     return res.status(400).json({ error: 'Text content is required for scene extraction.' });
   }
@@ -129,8 +131,9 @@ app.post('/api/extract-scene', async (req, res) => {
     const clientApiKey = req.headers['x-gemini-api-key'] as string | undefined;
     const ai = getAiClient(clientApiKey);
     
+    console.log('[SERVER DEBUG] Querying Gemini model: gemini-3.1-flash-lite for scene extraction...');
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: `Please analyze this book excerpt and extract visual descriptors for scene rendering:\n\n"""\n${text}\n"""`,
       config: {
         systemInstruction: `You are an expert literary scene visualizer. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 
@@ -145,6 +148,7 @@ Be extremely descriptive in your visual details, clothing description, posture, 
 
     const duration = Date.now() - startTime;
     const responseText = response.text || '{}';
+    console.log('[SERVER DEBUG] Gemini raw response for scene extraction:', responseText);
     const parsedScene = JSON.parse(responseText.trim());
 
     return res.json({
@@ -155,7 +159,7 @@ Be extremely descriptive in your visual details, clothing description, posture, 
     });
 
   } catch (error: any) {
-    console.error('Scene extraction error:', error);
+    console.error('[SERVER ERROR] Scene extraction failure:', error);
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to extract scene context using Gemini.'
@@ -170,6 +174,8 @@ Be extremely descriptive in your visual details, clothing description, posture, 
 app.post('/api/generate-image', async (req, res) => {
   const { prompt } = req.body;
 
+  console.log('[SERVER DEBUG] Received /api/generate-image request. Prompt:', prompt);
+
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
     return res.status(400).json({ error: 'Prompt is required for image generation.' });
   }
@@ -180,6 +186,7 @@ app.post('/api/generate-image', async (req, res) => {
     const clientApiKey = req.headers['x-gemini-api-key'] as string | undefined;
     const ai = getAiClient(clientApiKey);
 
+    console.log('[SERVER DEBUG] Sending image generation request to gemini-3.1-flash-image with prompt:', prompt);
     // Use gemini-3.1-flash-image which supports high-quality 1K images
     const response = await ai.models.generateContent({
       model: 'gemini-3.1-flash-image',
@@ -199,6 +206,7 @@ app.post('/api/generate-image', async (req, res) => {
     });
 
     const duration = Date.now() - startTime;
+    console.log('[SERVER DEBUG] Received image generation response from Gemini. Time taken:', duration, 'ms');
     
     let imageUrl: string | null = null;
     const parts = response.candidates?.[0]?.content?.parts || [];
@@ -210,9 +218,11 @@ app.post('/api/generate-image', async (req, res) => {
     }
 
     if (!imageUrl) {
+      console.error('[SERVER ERROR] Gemini response did not contain any inlineData parts.');
       throw new Error('Image model did not return any inline image data.');
     }
 
+    console.log('[SERVER DEBUG] Successfully generated image base64 data.');
     return res.json({
       success: true,
       imageUrl,
@@ -220,7 +230,7 @@ app.post('/api/generate-image', async (req, res) => {
     });
 
   } catch (error: any) {
-    console.error('Image generation error:', error);
+    console.error('[SERVER ERROR] Image generation failure:', error);
     
     // Check for specific error types (e.g. paid API key / model permissions)
     let userFriendlyError = error.message || 'Failed to generate image using Gemini.';

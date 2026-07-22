@@ -231,18 +231,28 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         finalExtractedWindow = text;
 
         // Call our server API for scene extraction
+        console.log('[CLIENT DEBUG] Calling /api/extract-scene with payload text length:', text.length);
         const extractRes = await fetch('/api/extract-scene', {
           method: 'POST',
           headers: requestHeaders,
           body: JSON.stringify({ text }),
         });
 
-        if (!extractRes.ok) {
-          const errData = await extractRes.json();
-          throw new Error(errData.error || 'Failed to extract scene descriptors from server.');
+        const extractRawText = await extractRes.text();
+        console.log('[CLIENT DEBUG] Raw response from /api/extract-scene:', extractRawText);
+
+        let extractData;
+        try {
+          extractData = JSON.parse(extractRawText);
+        } catch (parseErr: any) {
+          console.error('[CLIENT ERROR] Failed to parse scene extraction response as JSON:', parseErr, 'Raw response text:', extractRawText);
+          throw new Error(`Failed to parse scene extraction response from server (Status ${extractRes.status}). ${parseErr.message || ''}`);
         }
 
-        const extractData = await extractRes.json();
+        if (!extractRes.ok) {
+          throw new Error(extractData.error || `Server error during scene extraction (Status ${extractRes.status}).`);
+        }
+
         const sceneData: SceneJSON = extractData.data;
         telemetryTokenUsage += extractData.approxTokens || 0;
 
@@ -307,18 +317,30 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       set({ generationStatus: 'generating_image' });
       const imageStart = Date.now();
 
+      const imagePayload = { prompt: finalPrompt };
+      console.log('[CLIENT DEBUG] Calling /api/generate-image with JSON payload:', JSON.stringify(imagePayload, null, 2));
+
       const imageRes = await fetch('/api/generate-image', {
         method: 'POST',
         headers: requestHeaders,
-        body: JSON.stringify({ prompt: finalPrompt }),
+        body: JSON.stringify(imagePayload),
       });
 
-      if (!imageRes.ok) {
-        const errData = await imageRes.json();
-        throw new Error(errData.error || 'Failed to generate scene illustration from server.');
+      const imageRawText = await imageRes.text();
+      console.log('[CLIENT DEBUG] Raw response from /api/generate-image (text length):', imageRawText.length);
+
+      let imageData;
+      try {
+        imageData = JSON.parse(imageRawText);
+      } catch (parseErr: any) {
+        console.error('[CLIENT ERROR] Failed to parse image generation response as JSON:', parseErr, 'Raw response text snippet:', imageRawText.substring(0, 500));
+        throw new Error(`Failed to parse image generation response from server (Status ${imageRes.status}). ${parseErr.message || ''}`);
       }
 
-      const imageData = await imageRes.json();
+      if (!imageRes.ok) {
+        throw new Error(imageData.error || `Server error during image generation (Status ${imageRes.status}).`);
+      }
+
       const generatedImageUrl = imageData.imageUrl;
 
       // Save to IndexedDB cache
