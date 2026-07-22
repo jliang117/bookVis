@@ -131,9 +131,9 @@ app.post('/api/extract-scene', async (req, res) => {
     const clientApiKey = req.headers['x-gemini-api-key'] as string | undefined;
     const ai = getAiClient(clientApiKey);
     
-    console.log('[SERVER DEBUG] Querying Gemini model: gemini-3.1-flash-lite for scene extraction...');
+    console.log('[SERVER DEBUG] Querying Gemini model: gemini-2.5-flash for scene extraction...');
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: 'gemini-2.5-flash',
       contents: `Please analyze this book excerpt and extract visual descriptors for scene rendering:\n\n"""\n${text}\n"""`,
       config: {
         systemInstruction: `You are an expert literary scene visualizer. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 

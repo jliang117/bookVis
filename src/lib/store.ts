@@ -35,6 +35,178 @@ const getInitialApiKeys = (): ApiKeys => {
   }
 };
 
+// Helper function to extract scene directly from browser using Gemini API
+async function clientExtractScene(text: string, apiKey: string): Promise<SceneJSON> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            text: `Please analyze this book excerpt and extract visual descriptors for scene rendering:\n\n"""\n${text}\n"""`
+          }
+        ]
+      }
+    ],
+    systemInstruction: {
+      parts: [
+        {
+          text: `You are an expert literary scene visualizer. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 
+
+You must strictly evaluate if there is "enoughContext" (e.g. setting description, physical environment, character action, or visual markers). Set "enoughContext" to true ONLY if there is sufficient descriptive detail to create a vivid visual scene. If the text is too brief, highly abstract, purely conversational, or lacks any concrete visual/environmental markers to anchor an illustration, set "enoughContext" to false.
+
+Be extremely descriptive in your visual details, clothing description, posture, and environmental atmosphere. Do not assume or hallucinate features not hinted at in the text. Ensure output is in strict JSON conforming to the schema.`
+        }
+      ]
+    },
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          enoughContext: {
+            type: 'BOOLEAN',
+            description: 'True if there is sufficient descriptive, narrative, or environmental detail in the text to create a vivid visual scene. False if the text is too brief, highly abstract, purely conversational, or lacks any concrete visual/environmental markers to anchor an illustration.'
+          },
+          scene: {
+            type: 'OBJECT',
+            properties: {
+              location: {
+                type: 'STRING',
+                description: 'Where does this scene take place? (e.g. Victorian library, damp forest, high-tech control room)'
+              },
+              time: {
+                type: 'STRING',
+                description: 'What time of day or time period is it? (e.g. sunset, late night, medieval era, dawn)'
+              },
+              lighting: {
+                type: 'STRING',
+                description: 'How is the scene illuminated? (e.g. warm candlelight, harsh fluorescent light, shafts of golden sunlight)'
+              },
+              weather: {
+                type: 'STRING',
+                description: 'What is the weather outside or ambient conditions? (e.g. heavy rain, dense fog, clear starry night)'
+              },
+              mood: {
+                type: 'STRING',
+                description: 'What mood or emotional tone should the illustration convey? (e.g. tense anticipation, cozy serenity, melancholic isolation, grand wonder)'
+              },
+              characters: {
+                type: 'ARRAY',
+                items: { type: 'STRING' },
+                description: "List of characters present, including descriptions of their appearance, clothing, and posture if mentioned (e.g., ['Elizabeth: mid-20s, dark coat, tense posture', 'An old librarian: silver hair, dusty suit'])"
+              },
+              importantObjects: {
+                type: 'ARRAY',
+                items: { type: 'STRING' },
+                description: "Objects that are central to the action or setting (e.g., ['A half-opened wooden box with a glowing gemstone', 'Dusty leather-bound grimoire'])"
+              },
+              action: {
+                type: 'STRING',
+                description: 'What specific action or event is occurring in this moment? (e.g., Elizabeth is sliding a secret shelf aside)'
+              },
+              visualDetails: {
+                type: 'ARRAY',
+                items: { type: 'STRING' },
+                description: "Specific textural, color-related, or background visual details (e.g., ['Motes of dust dancing in light shafts', 'Flaking gold leaf on book spines'])"
+              },
+              cameraFocus: {
+                type: 'STRING',
+                description: 'What should be the main focal point or composition style? (e.g. Close-up on the wooden box, medium shot of Elizabeth with the bookshelves)'
+              },
+              styleNotes: {
+                type: 'ARRAY',
+                items: { type: 'STRING' },
+                description: "Additional notes about the physical environment or composition structure (e.g. ['high ceilinged room', 'shadowy corners'])"
+              }
+            },
+            required: [
+              'location', 'time', 'lighting', 'weather', 'mood', 'characters', 'importantObjects', 'action', 'visualDetails', 'cameraFocus', 'styleNotes'
+            ]
+          }
+        },
+        required: ['enoughContext']
+      }
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const resText = await res.text();
+  if (!res.ok) {
+    let errMsg = `Gemini API scene extraction error (Status ${res.status})`;
+    try {
+      const errJson = JSON.parse(resText);
+      errMsg = errJson.error?.message || errMsg;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  const resJson = JSON.parse(resText);
+  const contentText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  return JSON.parse(contentText.trim());
+}
+
+// Helper function to generate image directly from browser using Gemini API
+async function clientGenerateImage(prompt: string, apiKey: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${apiKey}`;
+  
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            text: prompt
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: '16:9',
+        imageSize: '1K'
+      }
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const resText = await res.text();
+  if (!res.ok) {
+    let errMsg = `Gemini API image generation error (Status ${res.status})`;
+    try {
+      const errJson = JSON.parse(resText);
+      errMsg = errJson.error?.message || errMsg;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  const resJson = JSON.parse(resText);
+  let imageUrl: string | null = null;
+  const parts = resJson.candidates?.[0]?.content?.parts || [];
+  for (const part of parts) {
+    if (part.inlineData) {
+      imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+      break;
+    }
+  }
+
+  if (!imageUrl) {
+    throw new Error('Gemini direct API response did not contain inline image data.');
+  }
+
+  return imageUrl;
+}
+
 export const useAppStore = create<AppState & AppActions>((set, get) => ({
   // State
   fileHash: null,
@@ -230,31 +402,58 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         
         finalExtractedWindow = text;
 
-        // Call our server API for scene extraction
-        console.log('[CLIENT DEBUG] Calling /api/extract-scene with payload text length:', text.length);
-        const extractRes = await fetch('/api/extract-scene', {
-          method: 'POST',
-          headers: requestHeaders,
-          body: JSON.stringify({ text }),
-        });
+        let sceneData: SceneJSON;
+        let tokensUsed = 0;
 
-        const extractRawText = await extractRes.text();
-        console.log('[CLIENT DEBUG] Raw response from /api/extract-scene:', extractRawText);
-
-        let extractData;
         try {
-          extractData = JSON.parse(extractRawText);
-        } catch (parseErr: any) {
-          console.error('[CLIENT ERROR] Failed to parse scene extraction response as JSON:', parseErr, 'Raw response text:', extractRawText);
-          throw new Error(`Failed to parse scene extraction response from server (Status ${extractRes.status}). ${parseErr.message || ''}`);
+          const payload = { text };
+          console.log('[CLIENT DEBUG] Sending scene extraction payload:', JSON.stringify(payload, null, 2));
+          
+          const extractRes = await fetch('/api/extract-scene', {
+            method: 'POST',
+            headers: requestHeaders,
+            body: JSON.stringify(payload),
+          });
+
+          const extractRawText = await extractRes.text();
+          console.log('[CLIENT DEBUG] Raw response from /api/extract-scene:', extractRawText);
+
+          let extractData;
+          try {
+            extractData = JSON.parse(extractRawText);
+          } catch (parseErr: any) {
+            console.error('[CLIENT ERROR] Failed to parse scene extraction response as JSON:', parseErr, 'Raw response text:', extractRawText);
+            throw new Error(`Failed to parse scene extraction response from server (Status ${extractRes.status}). ${parseErr.message || ''}`);
+          }
+
+          if (!extractRes.ok) {
+            throw new Error(extractData.error || `Server error during scene extraction (Status ${extractRes.status}).`);
+          }
+
+          sceneData = extractData.data;
+          tokensUsed = extractData.approxTokens || 0;
+
+        } catch (serverError: any) {
+          console.warn('[CLIENT WARNING] Server scene extraction failed or returned error. Checking direct client fallback...', serverError);
+          
+          if (apiKeys?.gemini) {
+            console.log('[CLIENT DEBUG] Fallback: Performing scene extraction directly from browser with client Gemini API key...');
+            try {
+              sceneData = await clientExtractScene(text, apiKeys.gemini);
+              tokensUsed = Math.ceil(text.length / 4) + 500;
+            } catch (clientErr: any) {
+              console.error('[CLIENT ERROR] Direct client scene extraction failed as well:', clientErr);
+              throw new Error(`Scene extraction failed: Server error (${serverError.message}) AND Direct Client Fallback error (${clientErr.message})`);
+            }
+          } else {
+            if (serverError.message.includes('Status 405') || serverError.message.includes('Method Not Allowed') || serverError.message.includes('405')) {
+              throw new Error(`Visualization Pipeline Error: Cloudflare/static environment detected (Method Not Allowed 405).\n\nTo run the applet on this custom hosting domain, please configure your own Gemini API Key in the top-right 'API Keys' modal!`);
+            }
+            throw serverError;
+          }
         }
 
-        if (!extractRes.ok) {
-          throw new Error(extractData.error || `Server error during scene extraction (Status ${extractRes.status}).`);
-        }
-
-        const sceneData: SceneJSON = extractData.data;
-        telemetryTokenUsage += extractData.approxTokens || 0;
+        telemetryTokenUsage += tokensUsed;
 
         if (sceneData.enoughContext) {
           finalSceneJson = sceneData;
@@ -317,31 +516,53 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       set({ generationStatus: 'generating_image' });
       const imageStart = Date.now();
 
+      let generatedImageUrl = '';
       const imagePayload = { prompt: finalPrompt };
-      console.log('[CLIENT DEBUG] Calling /api/generate-image with JSON payload:', JSON.stringify(imagePayload, null, 2));
 
-      const imageRes = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify(imagePayload),
-      });
-
-      const imageRawText = await imageRes.text();
-      console.log('[CLIENT DEBUG] Raw response from /api/generate-image (text length):', imageRawText.length);
-
-      let imageData;
       try {
-        imageData = JSON.parse(imageRawText);
-      } catch (parseErr: any) {
-        console.error('[CLIENT ERROR] Failed to parse image generation response as JSON:', parseErr, 'Raw response text snippet:', imageRawText.substring(0, 500));
-        throw new Error(`Failed to parse image generation response from server (Status ${imageRes.status}). ${parseErr.message || ''}`);
-      }
+        console.log('[CLIENT DEBUG] Sending image generation payload:', JSON.stringify(imagePayload, null, 2));
 
-      if (!imageRes.ok) {
-        throw new Error(imageData.error || `Server error during image generation (Status ${imageRes.status}).`);
-      }
+        const imageRes = await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: requestHeaders,
+          body: JSON.stringify(imagePayload),
+        });
 
-      const generatedImageUrl = imageData.imageUrl;
+        const imageRawText = await imageRes.text();
+        console.log('[CLIENT DEBUG] Raw response from /api/generate-image (text length):', imageRawText.length);
+
+        let imageData;
+        try {
+          imageData = JSON.parse(imageRawText);
+        } catch (parseErr: any) {
+          console.error('[CLIENT ERROR] Failed to parse image generation response as JSON:', parseErr, 'Raw response text snippet:', imageRawText.substring(0, 500));
+          throw new Error(`Failed to parse image generation response from server (Status ${imageRes.status}). ${parseErr.message || ''}`);
+        }
+
+        if (!imageRes.ok) {
+          throw new Error(imageData.error || `Server error during image generation (Status ${imageRes.status}).`);
+        }
+
+        generatedImageUrl = imageData.imageUrl;
+
+      } catch (serverError: any) {
+        console.warn('[CLIENT WARNING] Server image generation failed or returned error. Checking direct client fallback...', serverError);
+
+        if (apiKeys?.gemini) {
+          console.log('[CLIENT DEBUG] Fallback: Generating image directly from browser with client Gemini API key...');
+          try {
+            generatedImageUrl = await clientGenerateImage(finalPrompt, apiKeys.gemini);
+          } catch (clientErr: any) {
+            console.error('[CLIENT ERROR] Direct client image generation failed as well:', clientErr);
+            throw new Error(`Image generation failed: Server error (${serverError.message}) AND Direct Client Fallback error (${clientErr.message})`);
+          }
+        } else {
+          if (serverError.message.includes('Status 405') || serverError.message.includes('Method Not Allowed') || serverError.message.includes('405')) {
+            throw new Error(`Visualization Pipeline Error: Cloudflare/static environment detected (Method Not Allowed 405).\n\nTo run the applet on this custom hosting domain, please configure your own Gemini API Key in the top-right 'API Keys' modal!`);
+          }
+          throw serverError;
+        }
+      }
 
       // Save to IndexedDB cache
       const cacheEntry: CacheEntry = {
