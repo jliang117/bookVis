@@ -3,8 +3,11 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { Upload, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 
-// Set up PDFJS Worker dynamically to ensure compatibility
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.0.379'}/pdf.worker.min.js`;
+// Set up PDFJS Worker using Vite's URL asset loader for offline-safe compatibility
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 export default function PdfUploader() {
   const setPageTexts = useAppStore((state) => state.setPageTexts);

@@ -75,7 +75,7 @@ export default function ImagePanel() {
             </div>
             <h3 className="text-sm font-bold text-slate-200 mb-1">No Scene Generated</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Go to any page of your book to kickstart the automatic AI visualization pipeline.
+              Click the <strong className="text-indigo-400 font-semibold">Generate</strong> button in the top bar to analyze the current page and visualize it with AI.
             </p>
           </div>
         )}

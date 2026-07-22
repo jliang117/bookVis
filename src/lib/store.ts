@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AppState, ArtStyle, GenerationStatus, SceneJSON, DeveloperTelemetry } from '../types';
+import { AppState, ArtStyle, GenerationStatus, SceneJSON, DeveloperTelemetry, ApiKeys } from '../types';
 import { extractTextWindow, countWords, EXTRACTOR_CONFIG } from './reader/textExtractor';
 import { buildPrompt } from './prompts/promptBuilder';
 import { ImageCache, generateCacheKey, CacheEntry, hashString } from './cache/imageCache';
@@ -11,6 +11,7 @@ interface AppActions {
   generateVisualization: (forceRegenerate?: boolean) => Promise<void>;
   clearCache: () => Promise<void>;
   resetStore: () => void;
+  setApiKeys: (keys: ApiKeys) => void;
 }
 
 const initialTelemetry: DeveloperTelemetry = {
@@ -23,6 +24,15 @@ const initialTelemetry: DeveloperTelemetry = {
   cacheHit: false,
   generationTimeMs: 0,
   approxTokenUsage: 0,
+};
+
+const getInitialApiKeys = (): ApiKeys => {
+  try {
+    const keys = localStorage.getItem('visual_reader_api_keys');
+    return keys ? JSON.parse(keys) : { gemini: '' };
+  } catch {
+    return { gemini: '' };
+  }
 };
 
 export const useAppStore = create<AppState & AppActions>((set, get) => ({
@@ -39,12 +49,22 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   generatedAt: null,
   telemetry: null,
   error: null,
+  apiKeys: getInitialApiKeys(),
 
   // Private states not exposed directly in AppState
   pageTexts: [] as string[],
 
   // Actions
-  setPageTexts: (texts, fileName, fileHash) => {
+  setApiKeys: (keys) => {
+    try {
+      localStorage.setItem('visual_reader_api_keys', JSON.stringify(keys));
+    } catch (e) {
+      console.error(e);
+    }
+    set({ apiKeys: keys });
+  },
+
+  setPageTexts: async (texts, fileName, fileHash) => {
     set({
       pageTexts: texts,
       fileName,
@@ -60,26 +80,94 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       error: null,
     });
 
-    // Try to pre-load a visualization for page 1 if text is available
-    get().generateVisualization();
+    // Check if we already have a cached visualization for page 1
+    if (fileHash && texts.length > 0) {
+      const selectedStyle = get().selectedStyle;
+      const { text } = extractTextWindow(texts, 1, EXTRACTOR_CONFIG.INITIAL_WORD_COUNT, 0);
+      const cacheKey = generateCacheKey(fileHash, 1, text, selectedStyle);
+      const cached = await ImageCache.get(cacheKey);
+      if (cached) {
+        set({
+          imageUrl: cached.imageUrl,
+          generationStatus: 'success',
+          generatedAt: new Date(cached.generatedAt).toLocaleTimeString(),
+          telemetry: {
+            currentPage: 1,
+            windowSize: countWords(text),
+            expansionAttempts: 0,
+            contextAccepted: true,
+            sceneJson: cached.sceneJson,
+            finalPrompt: buildPrompt(cached.sceneJson, selectedStyle),
+            cacheHit: true,
+            generationTimeMs: 0,
+            approxTokenUsage: 0,
+          }
+        });
+      }
+    }
   },
 
-  setCurrentPage: (page) => {
-    const { totalPages, currentPage } = get();
+  setCurrentPage: async (page) => {
+    const { totalPages, currentPage, selectedStyle, fileHash, pageTexts } = get();
     if (page < 1 || page > totalPages || page === currentPage) return;
     
-    set({ currentPage: page, error: null });
+    set({ currentPage: page, error: null, imageUrl: null, generationStatus: 'idle', telemetry: null });
     
-    // Automatically attempt to fetch/generate for the new page
-    get().generateVisualization();
+    // Check if we already have a cached visualization for this page
+    if (fileHash && pageTexts.length > 0 && pageTexts[page - 1]) {
+      const { text } = extractTextWindow(pageTexts, page, EXTRACTOR_CONFIG.INITIAL_WORD_COUNT, 0);
+      const cacheKey = generateCacheKey(fileHash, page, text, selectedStyle);
+      const cached = await ImageCache.get(cacheKey);
+      if (cached) {
+        set({
+          imageUrl: cached.imageUrl,
+          generationStatus: 'success',
+          generatedAt: new Date(cached.generatedAt).toLocaleTimeString(),
+          telemetry: {
+            currentPage: page,
+            windowSize: countWords(text),
+            expansionAttempts: 0,
+            contextAccepted: true,
+            sceneJson: cached.sceneJson,
+            finalPrompt: buildPrompt(cached.sceneJson, selectedStyle),
+            cacheHit: true,
+            generationTimeMs: 0,
+            approxTokenUsage: 0,
+          }
+        });
+      }
+    }
   },
 
-  setSelectedStyle: (style) => {
+  setSelectedStyle: async (style) => {
     if (style === get().selectedStyle) return;
-    set({ selectedStyle: style, error: null });
+    set({ selectedStyle: style, error: null, imageUrl: null, generationStatus: 'idle', telemetry: null });
     
-    // Regenerate when style changes
-    get().generateVisualization();
+    // Check if we already have a cached visualization for this style
+    const { fileHash, currentPage, pageTexts } = get();
+    if (fileHash && pageTexts.length > 0 && pageTexts[currentPage - 1]) {
+      const { text } = extractTextWindow(pageTexts, currentPage, EXTRACTOR_CONFIG.INITIAL_WORD_COUNT, 0);
+      const cacheKey = generateCacheKey(fileHash, currentPage, text, style);
+      const cached = await ImageCache.get(cacheKey);
+      if (cached) {
+        set({
+          imageUrl: cached.imageUrl,
+          generationStatus: 'success',
+          generatedAt: new Date(cached.generatedAt).toLocaleTimeString(),
+          telemetry: {
+            currentPage,
+            windowSize: countWords(text),
+            expansionAttempts: 0,
+            contextAccepted: true,
+            sceneJson: cached.sceneJson,
+            finalPrompt: buildPrompt(cached.sceneJson, style),
+            cacheHit: true,
+            generationTimeMs: 0,
+            approxTokenUsage: 0,
+          }
+        });
+      }
+    }
   },
 
   clearCache: async () => {
@@ -108,7 +196,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   generateVisualization: async (forceRegenerate = false) => {
-    const { pageTexts, currentPage, selectedStyle, fileHash, generationStatus } = get();
+    const { pageTexts, currentPage, selectedStyle, fileHash, generationStatus, apiKeys } = get();
     
     if (pageTexts.length === 0 || !fileHash) return;
     if (generationStatus === 'extracting_scene' || generationStatus === 'generating_image') return;
@@ -122,6 +210,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     let finalExtractedWindow = '';
     let contextAccepted = false;
     let telemetryTokenUsage = 0;
+
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiKeys?.gemini) {
+      requestHeaders['x-gemini-api-key'] = apiKeys.gemini;
+    }
 
     // --- PIPELINE STEP 1: Text Slicing & Scene Extraction (LLM) ---
     try {
@@ -138,7 +233,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // Call our server API for scene extraction
         const extractRes = await fetch('/api/extract-scene', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: requestHeaders,
           body: JSON.stringify({ text }),
         });
 
@@ -214,7 +309,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
       const imageRes = await fetch('/api/generate-image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: requestHeaders,
         body: JSON.stringify({ prompt: finalPrompt }),
       });
 

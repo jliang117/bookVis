@@ -17,27 +17,22 @@ const PORT = 3000;
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Lazy initializer for GoogleGenAI client to prevent startup crash if key is missing
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-      throw new Error(
-        'GEMINI_API_KEY is not configured. Please add your Gemini API key in Settings > Secrets.'
-      );
-    }
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
+// Initialize GoogleGenAI client with optional client-provided API key, falling back to server environment variable
+function getAiClient(clientApiKey?: string): GoogleGenAI {
+  const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    throw new Error(
+      'GEMINI_API_KEY is not configured. Please configure it in the API Keys modal or in Settings > Secrets.'
+    );
   }
-  return aiClient;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 }
 
 // Structured response schema for scene extraction matching the user request
@@ -131,7 +126,8 @@ app.post('/api/extract-scene', async (req, res) => {
   const startTime = Date.now();
 
   try {
-    const ai = getAiClient();
+    const clientApiKey = req.headers['x-gemini-api-key'] as string | undefined;
+    const ai = getAiClient(clientApiKey);
     
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
@@ -181,7 +177,8 @@ app.post('/api/generate-image', async (req, res) => {
   const startTime = Date.now();
 
   try {
-    const ai = getAiClient();
+    const clientApiKey = req.headers['x-gemini-api-key'] as string | undefined;
+    const ai = getAiClient(clientApiKey);
 
     // Use gemini-3.1-flash-image which supports high-quality 1K images
     const response = await ai.models.generateContent({

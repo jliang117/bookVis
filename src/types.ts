@@ -50,6 +50,11 @@ export interface DeveloperTelemetry {
   approxTokenUsage: number;
 }
 
+export interface ApiKeys {
+  gemini: string;
+  [key: string]: string;
+}
+
 export interface AppState {
   fileHash: string | null;
   fileName: string | null;
@@ -64,4 +69,5 @@ export interface AppState {
   telemetry: DeveloperTelemetry | null;
   error: string | null;
   pageTexts: string[];
+  apiKeys: ApiKeys;
 }
