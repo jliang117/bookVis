@@ -1,9 +1,9 @@
 import { AppState } from '../../types';
 
 export const EXTRACTOR_CONFIG = {
-  INITIAL_WORD_COUNT: 1200, // 1000-1500 words centered around current page
-  EXPANSION_WORD_COUNT: 100, // ~100 words expanded on each side per attempt
-  MAX_EXPANSION_LIMIT: 500,  // Max total expansion on each side
+  INITIAL_WORD_COUNT: 350, // Focused on current page (standard ~250-350 words page)
+  EXPANSION_WORD_COUNT: 120, // ~120 words expanded on each side per attempt if context is insufficient
+  MAX_EXPANSION_LIMIT: 400,  // Max total expansion on each side
 };
 
 /**

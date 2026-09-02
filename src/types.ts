@@ -55,6 +55,12 @@ export interface ApiKeys {
   [key: string]: string;
 }
 
+export interface ChapterInfo {
+  title: string;
+  startPage: number;
+  endPage: number;
+}
+
 export interface AppState {
   fileHash: string | null;
   fileName: string | null;
@@ -69,5 +75,6 @@ export interface AppState {
   telemetry: DeveloperTelemetry | null;
   error: string | null;
   pageTexts: string[];
+  chapters?: ChapterInfo[];
   apiKeys: ApiKeys;
 }

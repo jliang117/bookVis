@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import { AppState, ArtStyle, GenerationStatus, SceneJSON, DeveloperTelemetry, ApiKeys } from '../types';
+import { AppState, ArtStyle, GenerationStatus, SceneJSON, DeveloperTelemetry, ApiKeys, ChapterInfo } from '../types';
 import { extractTextWindow, countWords, EXTRACTOR_CONFIG } from './reader/textExtractor';
 import { buildPrompt } from './prompts/promptBuilder';
 import { ImageCache, generateCacheKey, CacheEntry, hashString } from './cache/imageCache';
 
 interface AppActions {
-  setPageTexts: (texts: string[], fileName: string, fileHash: string) => void;
+  setPageTexts: (texts: string[], fileName: string, fileHash: string, chapters?: ChapterInfo[]) => void;
   setCurrentPage: (page: number) => void;
   setSelectedStyle: (style: ArtStyle) => void;
   generateVisualization: (forceRegenerate?: boolean) => Promise<void>;
@@ -222,6 +222,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   telemetry: null,
   error: null,
   apiKeys: getInitialApiKeys(),
+  chapters: [],
 
   // Private states not exposed directly in AppState
   pageTexts: [] as string[],
@@ -236,11 +237,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({ apiKeys: keys });
   },
 
-  setPageTexts: async (texts, fileName, fileHash) => {
+  setPageTexts: async (texts, fileName, fileHash, chapters = []) => {
     set({
       pageTexts: texts,
       fileName,
       fileHash,
+      chapters: chapters || [],
       currentPage: 1,
       totalPages: texts.length,
       extractedWindow: '',
@@ -364,6 +366,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       telemetry: null,
       error: null,
       pageTexts: [],
+      chapters: [],
     });
   },
 

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { Upload, FileText, Loader2, AlertCircle, Sparkles, Type } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertCircle, Sparkles, Type, BookOpen } from 'lucide-react';
 import { useAppStore } from '../lib/store';
+import { parseEpub } from '../lib/epubParser';
 
 // Set up PDFJS Worker using Vite's URL asset loader for offline-safe compatibility
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -19,12 +20,16 @@ export default function PdfUploader() {
   const [isDragging, setIsDragging] = useState(false);
   const [parsingProgress, setParsingProgress] = useState<number | null>(null);
   const [totalPages, setTotalPages] = useState<number | null>(null);
+  const [parsingStatusText, setParsingStatusText] = useState<string>('Parsing book content...');
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = async (file: File) => {
-    if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
-      setError('Only PDF files are supported for reading and visualization.');
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isEpub = file.type === 'application/epub+zip' || file.name.toLowerCase().endsWith('.epub');
+
+    if (!isPdf && !isEpub) {
+      setError('Please upload a valid .pdf or .epub ebook file.');
       return;
     }
 
@@ -33,36 +38,54 @@ export default function PdfUploader() {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-      
-      const pdf = await loadingTask.promise;
-      const numPages = pdf.numPages;
-      setTotalPages(numPages);
-
-      // Unique hash to identify this book for local caching
       const bookHash = `${file.name.replace(/\s+/g, '_')}_${file.size}_${file.lastModified}`;
-      const extractedPageTexts: string[] = [];
 
-      for (let i = 1; i <= numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
+      if (isPdf) {
+        setParsingStatusText('Extracting PDF pages...');
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         
-        extractedPageTexts.push(pageText);
-        setParsingProgress(i);
+        const pdf = await loadingTask.promise;
+        const numPages = pdf.numPages;
+        setTotalPages(numPages);
+
+        const extractedPageTexts: string[] = [];
+
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ');
+          
+          extractedPageTexts.push(pageText);
+          setParsingProgress(i);
+        }
+
+        // Keep reference to PDF document in window for canvas-based page rendering
+        (window as any).__CURRENT_PDF_DOC__ = pdf;
+
+        // Store in global state (which automatically kicks off page 1 generation)
+        setPageTexts(extractedPageTexts, file.name, bookHash);
+
+      } else if (isEpub) {
+        setParsingStatusText('Unpacking & parsing EPUB chapters...');
+        (window as any).__CURRENT_PDF_DOC__ = null;
+
+        const defaultTitle = file.name.replace(/\.epub$/i, '');
+        const { title, pages, chapters } = await parseEpub(arrayBuffer, defaultTitle);
+
+        setTotalPages(pages.length);
+        setParsingProgress(pages.length);
+
+        // Store in global state with structured chapters
+        setPageTexts(pages, title, bookHash, chapters);
       }
 
-      // Store in global state (which automatically kicks off page 1 generation)
-      setPageTexts(extractedPageTexts, file.name, bookHash);
-
-      // Keep reference to PDF document in window for canvas-based page rendering
-      (window as any).__CURRENT_PDF_DOC__ = pdf;
-
     } catch (err: any) {
-      console.error('PDF Parsing failed:', err);
-      setError('Failed to parse PDF document. Ensure it is not password protected or corrupted.');
+      console.error('Book parsing failed:', err);
+      setError(
+        err.message || 'Failed to parse the uploaded ebook. Ensure the file is not corrupted or DRM protected.'
+      );
       setParsingProgress(null);
     }
   };
@@ -136,8 +159,8 @@ export default function PdfUploader() {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Upload PDF File</span>
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Upload Ebook (PDF, EPUB)</span>
           </button>
           <button
             type="button"
@@ -170,7 +193,7 @@ export default function PdfUploader() {
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept="application/pdf"
+            accept=".pdf,.epub,application/pdf,application/epub+zip"
             className="hidden"
           />
 
@@ -180,21 +203,21 @@ export default function PdfUploader() {
                 <Upload className="w-7 h-7 text-indigo-400" />
               </div>
               <p className="text-base font-semibold text-slate-200 mb-1">
-                Drag & drop your PDF book here
+                Drag & drop your PDF or EPUB book here
               </p>
               <p className="text-xs text-slate-500 mb-4">
-                Or click to browse your computer
+                Or click to browse your computer (.pdf, .epub)
               </p>
               <div className="inline-flex items-center gap-1.5 text-xs text-slate-400 bg-[#161616] px-3 py-1.5 rounded-full border border-white/5">
-                <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Supports PDF documents up to 50MB</span>
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Supports PDF & EPUB documents up to 50MB</span>
               </div>
             </div>
           ) : (
             <div className="flex flex-col items-center text-center w-full max-w-md">
               <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-3" />
               <p className="text-base font-semibold text-slate-200 mb-1">
-                Parsing book content...
+                {parsingStatusText}
               </p>
               <p className="text-xs text-slate-400 mb-3">
                 Extracting searchable text pages for companion rendering
@@ -210,7 +233,7 @@ export default function PdfUploader() {
               </div>
               
               <span className="text-xs font-mono font-bold text-slate-400">
-                Page {parsingProgress} of {totalPages || '?'}
+                {totalPages ? `Page ${parsingProgress} of ${totalPages}` : 'Processing chapters...'}
               </span>
             </div>
           )}
