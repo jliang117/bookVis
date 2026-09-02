@@ -65,7 +65,7 @@ export default function ImagePanel() {
       </div>
 
       {/* Main Image Stage */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-[#0a0a0a] min-h-[400px]">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-[#0a0a0a] min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)] overflow-hidden">
         
         {/* IDLE State */}
         {generationStatus === 'idle' && !imageUrl && (

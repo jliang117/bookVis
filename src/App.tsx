@@ -87,13 +87,14 @@ export default function App() {
                 {/* Art style controller */}
                 <ArtStyleSelector />
 
-                {/* Reset layout */}
+                {/* Reset / New Scene layout */}
                 <button
                   onClick={resetStore}
                   className="flex items-center gap-1.5 px-3 py-2 bg-[#161616] text-slate-400 hover:text-slate-100 hover:bg-[#222222] border border-white/10 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                  title="Start a new scene or upload a new book"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Close Book</span>
+                  <span className="hidden md:inline">New Scene</span>
                 </button>
               </motion.div>
             )}
