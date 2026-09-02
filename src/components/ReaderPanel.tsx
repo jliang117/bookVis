@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, BookOpen, Search, ArrowRight, Menu, X, Layers, Check, Bookmark } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 
@@ -20,6 +20,75 @@ export default function ReaderPanel() {
   const [isRendered, setIsRendered] = useState(false);
   const [isChapterMenuOpen, setIsChapterMenuOpen] = useState(false);
   const isPdf = Boolean((window as any).__CURRENT_PDF_DOC__);
+
+  // Text Search State with 500ms debounce
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+
+  // 500ms debounce effect on search query
+  useEffect(() => {
+    if (searchQuery.trim() !== debouncedQuery) {
+      setIsSearching(true);
+    }
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+      setIsSearching(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Compute matching pages based on debounced search query
+  const searchResults = useMemo(() => {
+    if (!debouncedQuery) return [];
+    const queryLower = debouncedQuery.toLowerCase();
+    const results: { page: number; count: number }[] = [];
+
+    pageTexts.forEach((text, index) => {
+      if (text && text.toLowerCase().includes(queryLower)) {
+        let count = 0;
+        let pos = text.toLowerCase().indexOf(queryLower);
+        while (pos !== -1) {
+          count++;
+          pos = text.toLowerCase().indexOf(queryLower, pos + queryLower.length);
+        }
+        results.push({ page: index + 1, count });
+      }
+    });
+
+    return results;
+  }, [debouncedQuery, pageTexts]);
+
+  // Synchronize active match index and jump to first match when search query resolves
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      const matchIdx = searchResults.findIndex((r) => r.page === currentPage);
+      if (matchIdx !== -1) {
+        setCurrentMatchIndex(matchIdx);
+      } else {
+        setCurrentMatchIndex(0);
+        setCurrentPage(searchResults[0].page);
+      }
+    } else {
+      setCurrentMatchIndex(0);
+    }
+  }, [debouncedQuery, searchResults]);
+
+  const handlePrevMatch = () => {
+    if (searchResults.length === 0) return;
+    const prevIndex = (currentMatchIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentMatchIndex(prevIndex);
+    setCurrentPage(searchResults[prevIndex].page);
+  };
+
+  const handleNextMatch = () => {
+    if (searchResults.length === 0) return;
+    const nextIndex = (currentMatchIndex + 1) % searchResults.length;
+    setCurrentMatchIndex(nextIndex);
+    setCurrentPage(searchResults[nextIndex].page);
+  };
 
   // Reset scroll to top whenever changing reader pages (next, back, jump, chapter select)
   useEffect(() => {
@@ -147,16 +216,39 @@ export default function ReaderPanel() {
 
   const currentText = pageTexts[currentPage - 1] || '';
 
+  const renderHighlightedText = (text: string, query: string) => {
+    if (!query || !text) return text;
+    try {
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+      return parts.map((part, index) => {
+        if (part.toLowerCase() === query.toLowerCase()) {
+          return (
+            <mark
+              key={index}
+              className="bg-amber-400/30 text-amber-200 px-0.5 rounded font-semibold border-b border-amber-400/50"
+            >
+              {part}
+            </mark>
+          );
+        }
+        return part;
+      });
+    } catch {
+      return text;
+    }
+  };
+
   return (
     <div className="relative flex flex-col h-full bg-[#111111] border border-white/10 rounded-2xl shadow-lg overflow-hidden" ref={containerRef}>
       {/* Header Panel */}
-      <div className="relative flex items-center justify-between px-5 py-3 border-b border-white/5 bg-[#141414] z-20">
-        <div className="flex items-center gap-2.5 max-w-[65%]">
+      <div className="relative flex items-center justify-between px-3.5 sm:px-5 py-2.5 sm:py-3 border-b border-white/5 bg-[#141414] z-20 gap-2">
+        <div className="flex items-center gap-2 max-w-[50%] sm:max-w-[55%]">
           {/* Hamburger Chapter Drawer Toggle */}
           {chapters.length > 0 && (
             <button
               onClick={() => setIsChapterMenuOpen(!isChapterMenuOpen)}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+              className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 ${
                 isChapterMenuOpen
                   ? 'bg-indigo-600 border-indigo-500 text-white'
                   : 'bg-[#1a1a1a] hover:bg-[#242424] border-white/10 text-slate-300 hover:text-white'
@@ -165,27 +257,90 @@ export default function ReaderPanel() {
               aria-label="Table of Contents"
             >
               <Menu className="w-4 h-4" />
-              <span className="hidden sm:inline text-[11px] font-medium">Chapters</span>
+              <span className="hidden md:inline text-[11px] font-medium">Chapters</span>
             </button>
           )}
 
-          <div className="flex items-center gap-2 truncate">
-            <BookOpen className="w-4 h-4 text-slate-400 shrink-0" />
+          <div className="flex items-center gap-1.5 truncate">
+            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 shrink-0" />
             <span className="text-xs font-semibold text-slate-300 truncate" title={fileName || ''}>
               {fileName || 'Reading Material'}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {currentChapter && (
-            <span className="hidden md:inline-block text-[11px] font-medium text-indigo-300 bg-indigo-950/40 border border-indigo-500/20 px-2.5 py-0.5 rounded-full truncate max-w-[150px]">
-              {currentChapter.title}
-            </span>
-          )}
-          <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-white/5 px-3 py-1 rounded-full text-xs font-semibold font-mono text-slate-300 shrink-0">
-            Page {currentPage} of {totalPages}
+        {/* Debounced Simple Text Search */}
+        <div className="flex items-center gap-1.5 shrink-0 max-w-[50%] sm:max-w-[45%]">
+          <div className="relative flex items-center w-full min-w-[130px] sm:min-w-[170px] max-w-[240px]">
+            <Search
+              className={`absolute left-2.5 w-3.5 h-3.5 pointer-events-none transition-colors ${
+                isSearching ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
+              }`}
+            />
+            <input
+              type="text"
+              placeholder="Search text..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-7 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setDebouncedQuery('');
+                }}
+                className="absolute right-2 p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
+
+          {/* Search Result Counter & Prev/Next Match Stepper */}
+          {debouncedQuery && (
+            <div className="flex items-center gap-1 shrink-0">
+              {searchResults.length > 0 ? (
+                <div className="flex items-center gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-2 py-1 text-[11px] font-mono text-slate-300">
+                  <span className="text-indigo-300 font-semibold">
+                    {currentMatchIndex + 1}/{searchResults.length}
+                  </span>
+                  <span className="text-slate-500 text-[10px] hidden sm:inline">pages</span>
+
+                  {searchResults.length > 1 && (
+                    <div className="flex items-center gap-0.5 ml-1 border-l border-white/10 pl-1">
+                      <button
+                        type="button"
+                        onClick={handlePrevMatch}
+                        className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
+                        title="Previous matching page"
+                        aria-label="Previous matching page"
+                      >
+                        <ChevronLeft className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNextMatch}
+                        className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
+                        title="Next matching page"
+                        aria-label="Next matching page"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                !isSearching && (
+                  <span className="text-[10px] sm:text-[11px] text-rose-300 bg-rose-950/40 border border-rose-500/20 px-2 py-1 rounded-xl shrink-0 font-medium">
+                    No matches
+                  </span>
+                )
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -290,7 +445,7 @@ export default function ReaderPanel() {
                 </div>
                 <div ref={textContainerRef} className="overflow-y-auto pr-2 max-h-[480px] lg:max-h-[calc(100vh-320px)] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                   <p className="font-serif text-slate-200 text-base md:text-lg leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40">
-                    {currentText || 'No text content available.'}
+                    {renderHighlightedText(currentText, debouncedQuery) || 'No text content available.'}
                   </p>
                 </div>
               </div>

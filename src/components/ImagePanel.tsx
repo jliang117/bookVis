@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, ShieldCheck, Menu, Check } from 'lucide-react';
+import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, ShieldCheck, Menu, Check, Download, FolderDown } from 'lucide-react';
+import JSZip from 'jszip';
 import { useAppStore } from '../lib/store';
+import { ImageCache } from '../lib/cache/imageCache';
 
 const REASSURING_MESSAGES = [
   'Skimming through adjacent pages for environmental markers...',
@@ -22,9 +24,13 @@ export default function ImagePanel() {
   const cachedImages = useAppStore((state) => state.cachedImages);
   const activeCacheKey = useAppStore((state) => state.activeCacheKey);
   const selectCachedImage = useAppStore((state) => state.selectCachedImage);
+  const fileName = useAppStore((state) => state.fileName);
+  const fileHash = useAppStore((state) => state.fileHash);
+  const currentPage = useAppStore((state) => state.currentPage);
   
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isZipping, setIsZipping] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close hamburger dropdown menu on click outside
@@ -56,21 +62,132 @@ export default function ImagePanel() {
     generateVisualization(true); // force regenerate, bypass cache
   };
 
+  const handleDownloadCurrent = () => {
+    if (!imageUrl) return;
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    const cleanBookName = (fileName || 'book').replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanStyle = selectedStyle.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '_');
+    link.download = `${cleanBookName}_page${currentPage}_${cleanStyle}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadAll = async () => {
+    if (isZipping) return;
+    setIsZipping(true);
+    try {
+      const allEntries = fileHash ? await ImageCache.getAllForBook(fileHash) : [];
+      
+      // Fallback to active in-memory cached or active imageUrl if IndexedDB list is empty
+      const entriesToZip = allEntries.length > 0 
+        ? allEntries 
+        : (imageUrl ? [{
+            currentPage,
+            selectedStyle,
+            imageUrl,
+            generatedAt: Date.now()
+          }] : []);
+
+      if (entriesToZip.length === 0) {
+        setIsZipping(false);
+        return;
+      }
+
+      const zip = new JSZip();
+      const cleanBookName = (fileName || 'book').replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+      
+      // Sort chronologically/by page
+      entriesToZip.sort((a, b) => (a.currentPage || 0) - (b.currentPage || 0));
+
+      const nameCounts: Record<string, number> = {};
+
+      entriesToZip.forEach((entry, idx) => {
+        const pageNum = entry.currentPage || (idx + 1);
+        const styleName = (entry.selectedStyle || 'illustration').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const baseName = `Page_${pageNum}_${styleName}`;
+        
+        const count = nameCounts[baseName] || 0;
+        nameCounts[baseName] = count + 1;
+        const entryFileName = count === 0 
+          ? `${baseName}.png` 
+          : `${baseName}_v${count + 1}.png`;
+
+        const rawBase64 = entry.imageUrl.includes(',') 
+          ? entry.imageUrl.split(',')[1] 
+          : entry.imageUrl;
+
+        zip.file(entryFileName, rawBase64, { base64: true });
+      });
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const blobUrl = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${cleanBookName}_all_pages_visualizations.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+    } catch (err: any) {
+      console.error('Failed to create ZIP of all generated images:', err);
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
   const isLoading = generationStatus === 'extracting_scene' || generationStatus === 'generating_image';
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d0d] border border-white/10 rounded-2xl shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-[#141414] relative">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-3.5 sm:px-5 py-2.5 sm:py-3 border-b border-white/5 bg-[#141414] relative gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 animate-pulse" />
-          <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+          <span className="text-xs font-bold text-slate-100 uppercase tracking-wider hidden sm:inline">
             AI Companion Canvas
+          </span>
+          <span className="text-xs font-bold text-slate-100 uppercase tracking-wider sm:hidden">
+            Canvas
           </span>
         </div>
         
-        {/* Right side controls: Cached image switcher + Regenerate button */}
-        <div className="flex items-center gap-2">
+        {/* Right side controls: Downloads + Cached image switcher + Regenerate button */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Download Current Image Button */}
+          {imageUrl && (
+            <button
+              onClick={handleDownloadCurrent}
+              disabled={isLoading || isZipping}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+              title={`Download active illustration (Page ${currentPage})`}
+              aria-label="Download current illustration"
+            >
+              <Download className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden md:inline">Download</span>
+            </button>
+          )}
+
+          {/* Download All (All Generated Pages) Button */}
+          {(imageUrl || cachedImages.length > 0) && (
+            <button
+              onClick={handleDownloadAll}
+              disabled={isLoading || isZipping}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+              title="Download all generated scenes across all pages as a ZIP archive"
+              aria-label="Download all illustrations"
+            >
+              {isZipping ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+              ) : (
+                <FolderDown className="w-3.5 h-3.5 text-indigo-400" />
+              )}
+              <span className="hidden md:inline">{isZipping ? 'Zipping...' : 'Download All'}</span>
+              <span className="md:hidden text-[11px]">{isZipping ? '...' : 'All'}</span>
+            </button>
+          )}
+
           {cachedImages.length > 0 && (
             <>
               {cachedImages.length <= 3 ? (
@@ -112,7 +229,8 @@ export default function ImagePanel() {
                     title="View all cached versions and art styles"
                   >
                     <Menu className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Versions ({cachedImages.length})</span>
+                    <span className="hidden sm:inline">Versions ({cachedImages.length})</span>
+                    <span className="sm:hidden font-mono text-[11px]">v({cachedImages.length})</span>
                   </button>
 
                   {/* Hamburger Dropdown Popover */}
@@ -195,7 +313,7 @@ export default function ImagePanel() {
               title="Force regenerate, bypassing local IndexedDB cache"
             >
               <RefreshCw className="w-3 h-3 animate-hover-spin text-indigo-400" />
-              <span>Regenerate</span>
+              <span className="hidden sm:inline">Regenerate</span>
             </button>
           )}
         </div>
