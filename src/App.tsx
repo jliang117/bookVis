@@ -12,6 +12,7 @@ import ImagePanel from './components/ImagePanel';
 import ArtStyleSelector from './components/ArtStyleSelector';
 import DeveloperPanel from './components/DeveloperPanel';
 import ApiKeysModal from './components/ApiKeysModal';
+import SettingsMenu from './components/SettingsMenu';
 import { motion } from 'motion/react';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
   const currentPage = useAppStore((state) => state.currentPage);
   const generateVisualization = useAppStore((state) => state.generateVisualization);
   const generationStatus = useAppStore((state) => state.generationStatus);
+  const showDeveloperTelemetry = useAppStore((state) => state.showDeveloperTelemetry);
 
   const [isApiKeysOpen, setIsApiKeysOpen] = useState(false);
 
@@ -96,8 +98,14 @@ export default function App() {
                   <LogOut className="w-3.5 h-3.5" />
                   <span className="hidden md:inline">New Scene</span>
                 </button>
+
+                {/* Settings Gear Menu */}
+                <SettingsMenu />
               </motion.div>
             )}
+
+            {/* If no book is loaded yet, also provide settings access */}
+            {!fileHash && <SettingsMenu />}
           </div>
         </div>
       </header>
@@ -130,8 +138,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bottom: Telemetry developer panel */}
-            <DeveloperPanel />
+            {/* Bottom: Telemetry developer panel (controlled via Settings) */}
+            {showDeveloperTelemetry && <DeveloperPanel />}
           </div>
         )}
       </main>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, ShieldCheck, Menu, Check } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 
 const REASSURING_MESSAGES = [
@@ -19,8 +19,26 @@ export default function ImagePanel() {
   const selectedStyle = useAppStore((state) => state.selectedStyle);
   const error = useAppStore((state) => state.error);
   const generateVisualization = useAppStore((state) => state.generateVisualization);
+  const cachedImages = useAppStore((state) => state.cachedImages);
+  const activeCacheKey = useAppStore((state) => state.activeCacheKey);
+  const selectCachedImage = useAppStore((state) => state.selectCachedImage);
   
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close hamburger dropdown menu on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen]);
 
   // Rotate reassuring loading messages during generation
   useEffect(() => {
@@ -43,7 +61,7 @@ export default function ImagePanel() {
   return (
     <div className="flex flex-col h-full bg-[#0d0d0d] border border-white/10 rounded-2xl shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-[#141414]">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-[#141414] relative">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 animate-pulse" />
           <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">
@@ -51,23 +69,142 @@ export default function ImagePanel() {
           </span>
         </div>
         
-        {generationStatus === 'success' && (
-          <button
-            onClick={handleRegenerate}
-            disabled={isLoading}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer"
-            title="Force regenerate, bypassing local IndexedDB cache"
-          >
-            <RefreshCw className="w-3 h-3 animate-hover-spin text-indigo-400" />
-            <span>Regenerate</span>
-          </button>
-        )}
+        {/* Right side controls: Cached image switcher + Regenerate button */}
+        <div className="flex items-center gap-2">
+          {cachedImages.length > 0 && (
+            <>
+              {cachedImages.length <= 3 ? (
+                /* Numerical buttons when 3 or fewer cached versions exist */
+                <div className="flex items-center gap-1 bg-[#101010] p-0.5 rounded-lg border border-white/10 shadow-inner">
+                  {cachedImages.map((entry, idx) => {
+                    const isActive = entry.key === activeCacheKey;
+                    const formattedTime = entry.generatedAt 
+                      ? new Date(entry.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : '';
+                    return (
+                      <button
+                        key={entry.key}
+                        onClick={() => selectCachedImage(entry.key)}
+                        disabled={isLoading}
+                        title={`Version ${idx + 1}: ${entry.selectedStyle}${formattedTime ? ` (${formattedTime})` : ''}`}
+                        className={`w-6 h-6 flex items-center justify-center text-xs font-bold rounded-md transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400/40 scale-105'
+                            : 'text-slate-400 hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Hamburger menu when more than 3 cached versions exist */
+                <div className="relative" ref={menuRef}>
+                  <button
+                    onClick={() => setIsMenuOpen((prev) => !prev)}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                      isMenuOpen
+                        ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200'
+                        : 'bg-[#161616] hover:bg-[#222222] border-white/10 text-slate-300 hover:text-white'
+                    }`}
+                    title="View all cached versions and art styles"
+                  >
+                    <Menu className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Versions ({cachedImages.length})</span>
+                  </button>
+
+                  {/* Hamburger Dropdown Popover */}
+                  {isMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-[#161616] border border-white/15 rounded-xl shadow-2xl p-2 z-50 backdrop-blur-xl">
+                      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-white/10 mb-1.5">
+                        <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider">
+                          Cached Versions
+                        </span>
+                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono">
+                          {cachedImages.length} images
+                        </span>
+                      </div>
+
+                      <div className="max-h-64 overflow-y-auto space-y-1 pr-0.5">
+                        {cachedImages.map((entry, idx) => {
+                          const isActive = entry.key === activeCacheKey;
+                          const formattedTime = entry.generatedAt
+                            ? new Date(entry.generatedAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '';
+                          return (
+                            <button
+                              key={entry.key}
+                              onClick={() => {
+                                selectCachedImage(entry.key);
+                                setIsMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-2.5 p-2 rounded-lg text-left transition-all cursor-pointer ${
+                                isActive
+                                  ? 'bg-indigo-950/70 border border-indigo-500/40 text-white'
+                                  : 'hover:bg-white/5 border border-transparent text-slate-300'
+                              }`}
+                            >
+                              {/* Mini image thumbnail */}
+                              <div className="relative w-9 h-9 rounded-md overflow-hidden bg-black/50 border border-white/10 shrink-0">
+                                <img
+                                  src={entry.imageUrl}
+                                  alt={`Version ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+
+                              {/* Details: Number, Style Name, Timestamp */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-xs font-semibold truncate text-slate-100">
+                                    #{idx + 1} {entry.selectedStyle}
+                                  </span>
+                                  {isActive && (
+                                    <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                  )}
+                                </div>
+                                {formattedTime && (
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
+                                    <Calendar className="w-3 h-3 text-slate-500" />
+                                    <span>{formattedTime}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {generationStatus === 'success' && (
+            <button
+              onClick={handleRegenerate}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer"
+              title="Force regenerate, bypassing local IndexedDB cache"
+            >
+              <RefreshCw className="w-3 h-3 animate-hover-spin text-indigo-400" />
+              <span>Regenerate</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Image Stage */}
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-[#0a0a0a] min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)] overflow-hidden">
         
-        {/* IDLE State */}
+        {/* IDLE State with no image */}
         {generationStatus === 'idle' && !imageUrl && (
           <div className="flex flex-col items-center text-center p-8 max-w-sm">
             <div className="w-12 h-12 rounded-2xl bg-[#141414] flex items-center justify-center text-slate-500 mb-4 border border-white/5">
@@ -80,8 +217,8 @@ export default function ImagePanel() {
           </div>
         )}
 
-        {/* LOADING State */}
-        {isLoading && (
+        {/* LOADING State with no previous image */}
+        {isLoading && !imageUrl && (
           <div className="flex flex-col items-center text-center p-8 max-w-md w-full">
             <div className="relative w-16 h-16 mb-6">
               {/* Outer ring */}
@@ -109,32 +246,57 @@ export default function ImagePanel() {
           </div>
         )}
 
-        {/* SUCCESS State */}
-        {generationStatus === 'success' && imageUrl && (
+        {/* IMAGE DISPLAY (Active Success, Idle with retained last image, or Loading with retained last image backdrop) */}
+        {imageUrl && generationStatus !== 'failed' && (
           <div className="relative w-full h-full flex items-center justify-center">
-            <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-neutral-905 max-w-full">
+            <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-[#111111] max-w-full">
               <img
                 src={imageUrl}
-                alt="Generated Scene"
-                className="max-h-[500px] w-auto max-w-full block object-contain select-none"
+                alt="Visualized Scene"
+                className={`max-h-[500px] w-auto max-w-full block object-contain select-none transition-all duration-300 ${
+                  isLoading ? 'filter brightness-40 scale-[0.99]' : ''
+                }`}
                 referrerPolicy="no-referrer"
               />
               
-              {/* Image Info Overlay on bottom */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-white">
-                  <Eye className="w-3.5 h-3.5 text-indigo-300" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-200">
-                    {selectedStyle} Style
-                  </span>
-                </div>
-                {generatedAt && (
-                  <div className="flex items-center gap-1 text-slate-400 text-[9px] font-mono">
-                    <Calendar className="w-3 h-3 text-indigo-400" />
-                    <span>Rendered {generatedAt}</span>
+              {/* Loading Overlay when generating new image while keeping last image displayed */}
+              {isLoading && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                  <div className="relative w-12 h-12 mb-3">
+                    <div className="absolute inset-0 rounded-full border-3 border-white/10 animate-pulse" />
+                    <div className="absolute inset-0 rounded-full border-3 border-t-indigo-500 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+                    <div className="absolute inset-3 rounded-full bg-[#111111] border border-white/5 flex items-center justify-center">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                    </div>
                   </div>
-                )}
-              </div>
+                  <h3 className="text-xs font-bold text-slate-100 mb-1">
+                    {generationStatus === 'extracting_scene' 
+                      ? 'Extracting New Scene...' 
+                      : 'Generating Style Canvas...'}
+                  </h3>
+                  <p className="text-[11px] text-slate-300 italic max-w-xs mx-auto">
+                    "{REASSURING_MESSAGES[loadingMessageIndex]}"
+                  </p>
+                </div>
+              )}
+
+              {/* Image Info Overlay on bottom */}
+              {!isLoading && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-white">
+                    <Eye className="w-3.5 h-3.5 text-indigo-300" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-200">
+                      {generationStatus === 'idle' ? 'Previous Scene' : `${selectedStyle} Style`}
+                    </span>
+                  </div>
+                  {generatedAt && (
+                    <div className="flex items-center gap-1 text-slate-400 text-[9px] font-mono">
+                      <Calendar className="w-3 h-3 text-indigo-400" />
+                      <span>Rendered {generatedAt}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

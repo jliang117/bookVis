@@ -9,9 +9,13 @@ interface AppActions {
   setCurrentPage: (page: number) => void;
   setSelectedStyle: (style: ArtStyle) => void;
   generateVisualization: (forceRegenerate?: boolean) => Promise<void>;
+  selectCachedImage: (key: string) => void;
   clearCache: () => Promise<void>;
   resetStore: () => void;
   setApiKeys: (keys: ApiKeys) => void;
+  setShowLastImageOnPageChange: (enabled: boolean) => void;
+  setShowDeveloperTelemetry: (enabled: boolean) => void;
+  setWindowSize: (size: number) => void;
 }
 
 const initialTelemetry: DeveloperTelemetry = {
@@ -32,6 +36,27 @@ const getInitialApiKeys = (): ApiKeys => {
     return keys ? JSON.parse(keys) : { gemini: '' };
   } catch {
     return { gemini: '' };
+  }
+};
+
+const getInitialSettings = () => {
+  try {
+    const showLast = localStorage.getItem('visual_reader_show_last_image');
+    const showTelemetry = localStorage.getItem('visual_reader_show_telemetry');
+    const rawWindowSize = localStorage.getItem('visual_reader_window_size');
+    const parsedWindowSize = rawWindowSize !== null ? parseInt(rawWindowSize, 10) : 0;
+    const windowSize = !isNaN(parsedWindowSize) ? Math.max(0, Math.min(5, parsedWindowSize)) : 0;
+    return {
+      showLastImageOnPageChange: showLast === 'true', // default false
+      showDeveloperTelemetry: showTelemetry === 'true', // default false
+      windowSize, // default 0, limit 0 to 5
+    };
+  } catch {
+    return {
+      showLastImageOnPageChange: false,
+      showDeveloperTelemetry: false,
+      windowSize: 0,
+    };
   }
 };
 
@@ -223,11 +248,44 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   error: null,
   apiKeys: getInitialApiKeys(),
   chapters: [],
+  cachedImages: [],
+  activeCacheKey: null,
+  showLastImageOnPageChange: getInitialSettings().showLastImageOnPageChange,
+  showDeveloperTelemetry: getInitialSettings().showDeveloperTelemetry,
+  windowSize: getInitialSettings().windowSize,
 
   // Private states not exposed directly in AppState
   pageTexts: [] as string[],
 
   // Actions
+  setWindowSize: (size) => {
+    const clamped = Math.max(0, Math.min(5, Math.floor(size) || 0));
+    try {
+      localStorage.setItem('visual_reader_window_size', String(clamped));
+    } catch (e) {
+      console.error(e);
+    }
+    set({ windowSize: clamped });
+  },
+
+  setShowLastImageOnPageChange: (enabled) => {
+    try {
+      localStorage.setItem('visual_reader_show_last_image', String(enabled));
+    } catch (e) {
+      console.error(e);
+    }
+    set({ showLastImageOnPageChange: enabled });
+  },
+
+  setShowDeveloperTelemetry: (enabled) => {
+    try {
+      localStorage.setItem('visual_reader_show_telemetry', String(enabled));
+    } catch (e) {
+      console.error(e);
+    }
+    set({ showDeveloperTelemetry: enabled });
+  },
+
   setApiKeys: (keys) => {
     try {
       localStorage.setItem('visual_reader_api_keys', JSON.stringify(keys));
@@ -252,26 +310,30 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       generatedAt: null,
       telemetry: null,
       error: null,
+      cachedImages: [],
+      activeCacheKey: null,
     });
 
-    // Check if we already have a cached visualization for page 1
+    // Check if we already have cached visualizations for page 1
     if (fileHash && texts.length > 0) {
-      const selectedStyle = get().selectedStyle;
-      const { text } = extractTextWindow(texts, 1, EXTRACTOR_CONFIG.INITIAL_WORD_COUNT, 0);
-      const cacheKey = generateCacheKey(fileHash, 1, text, selectedStyle);
-      const cached = await ImageCache.get(cacheKey);
-      if (cached) {
+      const pageEntries = await ImageCache.getForPage(fileHash, 1);
+      if (pageEntries.length > 0) {
+        const selectedStyle = get().selectedStyle;
+        const matching = pageEntries.find(e => e.selectedStyle === selectedStyle) || pageEntries[pageEntries.length - 1];
         set({
-          imageUrl: cached.imageUrl,
+          cachedImages: pageEntries,
+          activeCacheKey: matching.key,
+          imageUrl: matching.imageUrl,
+          selectedStyle: matching.selectedStyle as ArtStyle,
           generationStatus: 'success',
-          generatedAt: new Date(cached.generatedAt).toLocaleTimeString(),
+          generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
           telemetry: {
             currentPage: 1,
-            windowSize: countWords(text),
+            windowSize: 0,
             expansionAttempts: 0,
             contextAccepted: true,
-            sceneJson: cached.sceneJson,
-            finalPrompt: buildPrompt(cached.sceneJson, selectedStyle),
+            sceneJson: matching.sceneJson,
+            finalPrompt: buildPrompt(matching.sceneJson, matching.selectedStyle as ArtStyle),
             cacheHit: true,
             generationTimeMs: 0,
             approxTokenUsage: 0,
@@ -282,28 +344,38 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   setCurrentPage: async (page) => {
-    const { totalPages, currentPage, selectedStyle, fileHash, pageTexts } = get();
+    const { totalPages, currentPage, selectedStyle, fileHash, pageTexts, imageUrl: prevImageUrl, showLastImageOnPageChange } = get();
     if (page < 1 || page > totalPages || page === currentPage) return;
     
-    set({ currentPage: page, error: null, imageUrl: null, generationStatus: 'idle', telemetry: null });
+    set({
+      currentPage: page,
+      error: null,
+      imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
+      generationStatus: 'idle',
+      telemetry: null,
+      cachedImages: [],
+      activeCacheKey: null
+    });
     
-    // Check if we already have a cached visualization for this page
-    if (fileHash && pageTexts.length > 0 && pageTexts[page - 1]) {
-      const { text } = extractTextWindow(pageTexts, page, EXTRACTOR_CONFIG.INITIAL_WORD_COUNT, 0);
-      const cacheKey = generateCacheKey(fileHash, page, text, selectedStyle);
-      const cached = await ImageCache.get(cacheKey);
-      if (cached) {
+    // Check if we already have cached visualizations for this page
+    if (fileHash && pageTexts.length > 0) {
+      const pageEntries = await ImageCache.getForPage(fileHash, page);
+      if (pageEntries.length > 0) {
+        const matching = pageEntries.find(e => e.selectedStyle === selectedStyle) || pageEntries[pageEntries.length - 1];
         set({
-          imageUrl: cached.imageUrl,
+          cachedImages: pageEntries,
+          activeCacheKey: matching.key,
+          imageUrl: matching.imageUrl,
+          selectedStyle: matching.selectedStyle as ArtStyle,
           generationStatus: 'success',
-          generatedAt: new Date(cached.generatedAt).toLocaleTimeString(),
+          generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
           telemetry: {
             currentPage: page,
-            windowSize: countWords(text),
+            windowSize: 0,
             expansionAttempts: 0,
             contextAccepted: true,
-            sceneJson: cached.sceneJson,
-            finalPrompt: buildPrompt(cached.sceneJson, selectedStyle),
+            sceneJson: matching.sceneJson,
+            finalPrompt: buildPrompt(matching.sceneJson, matching.selectedStyle as ArtStyle),
             cacheHit: true,
             generationTimeMs: 0,
             approxTokenUsage: 0,
@@ -315,40 +387,71 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setSelectedStyle: async (style) => {
     if (style === get().selectedStyle) return;
-    set({ selectedStyle: style, error: null, imageUrl: null, generationStatus: 'idle', telemetry: null });
+    const { fileHash, currentPage, cachedImages, imageUrl: prevImageUrl, showLastImageOnPageChange } = get();
     
-    // Check if we already have a cached visualization for this style
-    const { fileHash, currentPage, pageTexts } = get();
-    if (fileHash && pageTexts.length > 0 && pageTexts[currentPage - 1]) {
-      const { text } = extractTextWindow(pageTexts, currentPage, EXTRACTOR_CONFIG.INITIAL_WORD_COUNT, 0);
-      const cacheKey = generateCacheKey(fileHash, currentPage, text, style);
-      const cached = await ImageCache.get(cacheKey);
-      if (cached) {
-        set({
-          imageUrl: cached.imageUrl,
-          generationStatus: 'success',
-          generatedAt: new Date(cached.generatedAt).toLocaleTimeString(),
-          telemetry: {
-            currentPage,
-            windowSize: countWords(text),
-            expansionAttempts: 0,
-            contextAccepted: true,
-            sceneJson: cached.sceneJson,
-            finalPrompt: buildPrompt(cached.sceneJson, style),
-            cacheHit: true,
-            generationTimeMs: 0,
-            approxTokenUsage: 0,
-          }
-        });
-      }
+    // Check if we already have a cached image for this style on the current page
+    const matching = cachedImages.find(e => e.selectedStyle === style);
+    if (matching) {
+      set({
+        selectedStyle: style,
+        activeCacheKey: matching.key,
+        imageUrl: matching.imageUrl,
+        generationStatus: 'success',
+        generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
+        telemetry: {
+          currentPage,
+          windowSize: 0,
+          expansionAttempts: 0,
+          contextAccepted: true,
+          sceneJson: matching.sceneJson,
+          finalPrompt: buildPrompt(matching.sceneJson, style),
+          cacheHit: true,
+          generationTimeMs: 0,
+          approxTokenUsage: 0,
+        }
+      });
+    } else {
+      set({
+        selectedStyle: style,
+        error: null,
+        imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
+        generationStatus: 'idle',
+        telemetry: null,
+        activeCacheKey: null
+      });
     }
+  },
+
+  selectCachedImage: (key: string) => {
+    const { cachedImages } = get();
+    const entry = cachedImages.find((c) => c.key === key);
+    if (!entry) return;
+
+    set({
+      activeCacheKey: entry.key,
+      imageUrl: entry.imageUrl,
+      selectedStyle: entry.selectedStyle as ArtStyle,
+      generationStatus: 'success',
+      generatedAt: new Date(entry.generatedAt).toLocaleTimeString(),
+      telemetry: {
+        currentPage: entry.currentPage,
+        windowSize: 0,
+        expansionAttempts: 0,
+        contextAccepted: true,
+        sceneJson: entry.sceneJson,
+        finalPrompt: buildPrompt(entry.sceneJson, entry.selectedStyle as ArtStyle),
+        cacheHit: true,
+        generationTimeMs: 0,
+        approxTokenUsage: 0,
+      }
+    });
   },
 
   clearCache: async () => {
     const { fileHash } = get();
     if (!fileHash) return;
     await ImageCache.clearForBook(fileHash);
-    set({ imageUrl: null, generationStatus: 'idle', telemetry: null });
+    set({ cachedImages: [], activeCacheKey: null, imageUrl: null, generationStatus: 'idle', telemetry: null });
   },
 
   resetStore: () => {
@@ -367,11 +470,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       error: null,
       pageTexts: [],
       chapters: [],
+      cachedImages: [],
+      activeCacheKey: null,
     });
   },
 
   generateVisualization: async (forceRegenerate = false) => {
-    const { pageTexts, currentPage, selectedStyle, fileHash, generationStatus, apiKeys } = get();
+    const { pageTexts, currentPage, selectedStyle, fileHash, generationStatus, apiKeys, windowSize } = get();
     
     if (pageTexts.length === 0 || !fileHash) return;
     if (generationStatus === 'extracting_scene' || generationStatus === 'generating_image') return;
@@ -399,7 +504,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         const { text, actualWordCount } = extractTextWindow(
           pageTexts,
           currentPage,
-          EXTRACTOR_CONFIG.INITIAL_WORD_COUNT,
+          windowSize,
           currentExpansionWords
         );
         
@@ -488,23 +593,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // --- PIPELINE STEP 2: Prompt Builder & Caching Check ---
       const finalPrompt = buildPrompt(finalSceneJson, selectedStyle);
       const textHash = hashString(finalExtractedWindow);
-      const cacheKey = generateCacheKey(fileHash, currentPage, finalExtractedWindow, selectedStyle);
 
       // Check IndexedDB cache unless we are explicitly force-regenerating
       if (!forceRegenerate) {
-        const cachedEntry = await ImageCache.get(cacheKey);
-        if (cachedEntry) {
+        const pageEntries = await ImageCache.getForPage(fileHash, currentPage);
+        const existingForStyle = pageEntries.find(e => e.selectedStyle === selectedStyle);
+        if (existingForStyle) {
           const duration = Date.now() - pipelineStart;
           set({
-            imageUrl: cachedEntry.imageUrl,
+            cachedImages: pageEntries,
+            activeCacheKey: existingForStyle.key,
+            imageUrl: existingForStyle.imageUrl,
             generationStatus: 'success',
-            generatedAt: new Date(cachedEntry.generatedAt).toLocaleTimeString(),
+            generatedAt: new Date(existingForStyle.generatedAt).toLocaleTimeString(),
             telemetry: {
               currentPage,
               windowSize: countWords(finalExtractedWindow),
               expansionAttempts,
               contextAccepted,
-              sceneJson: finalSceneJson,
+              sceneJson: existingForStyle.sceneJson || finalSceneJson,
               finalPrompt,
               cacheHit: true,
               generationTimeMs: duration,
@@ -567,7 +674,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         }
       }
 
-      // Save to IndexedDB cache
+      // Save to IndexedDB cache with unique timestamped key
+      const now = Date.now();
+      const cacheKey = generateCacheKey(fileHash, currentPage, finalExtractedWindow, selectedStyle, now);
       const cacheEntry: CacheEntry = {
         key: cacheKey,
         bookHash: fileHash,
@@ -576,16 +685,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         sceneJson: finalSceneJson,
         selectedStyle,
         imageUrl: generatedImageUrl,
-        generatedAt: Date.now()
+        generatedAt: now
       };
       await ImageCache.set(cacheEntry);
+
+      const existingCached = get().cachedImages.filter(c => c.key !== cacheKey);
+      const updatedCacheList = [...existingCached, cacheEntry];
 
       const pipelineDuration = Date.now() - pipelineStart;
 
       set({
+        cachedImages: updatedCacheList,
+        activeCacheKey: cacheKey,
         imageUrl: generatedImageUrl,
         generationStatus: 'success',
-        generatedAt: new Date().toLocaleTimeString(),
+        generatedAt: new Date(now).toLocaleTimeString(),
         telemetry: {
           currentPage,
           windowSize: countWords(finalExtractedWindow),

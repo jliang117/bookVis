@@ -61,6 +61,17 @@ export interface ChapterInfo {
   endPage: number;
 }
 
+export interface CachedImageItem {
+  key: string;
+  bookHash: string;
+  currentPage: number;
+  textHash: string;
+  sceneJson: any;
+  selectedStyle: string;
+  imageUrl: string;
+  generatedAt: number;
+}
+
 export interface AppState {
   fileHash: string | null;
   fileName: string | null;
@@ -77,4 +88,9 @@ export interface AppState {
   pageTexts: string[];
   chapters?: ChapterInfo[];
   apiKeys: ApiKeys;
+  cachedImages: CachedImageItem[];
+  activeCacheKey: string | null;
+  showLastImageOnPageChange: boolean;
+  showDeveloperTelemetry: boolean;
+  windowSize: number;
 }

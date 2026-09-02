@@ -15,16 +15,16 @@ export function countWords(text: string): number {
 }
 
 /**
- * Extracts a window of text centered around the current page
+ * Extracts a window of text centered around the current page based on pageWindowRadius
  * @param pageTexts Array of text for each page (0-indexed)
  * @param currentPage 1-indexed current page number
- * @param targetWordCount Target total word count
- * @param extraWordsSide Additional words to include on each side (for expansion)
+ * @param pageWindowRadius Number of pages before and after current page to include (0 = current only, 1 = ±1, max 5 = ±5)
+ * @param extraWordsSide Additional words to include on each side if context needs expansion
  */
 export function extractTextWindow(
   pageTexts: string[],
   currentPage: number,
-  targetWordCount: number = EXTRACTOR_CONFIG.INITIAL_WORD_COUNT,
+  pageWindowRadius: number = 0,
   extraWordsSide: number = 0
 ): { text: string; actualWordCount: number; pagesIncluded: number[] } {
   if (pageTexts.length === 0) {
@@ -32,55 +32,44 @@ export function extractTextWindow(
   }
 
   const centerPageIndex = Math.max(0, Math.min(currentPage - 1, pageTexts.length - 1));
-  const pagesIncluded = new Set<number>([centerPageIndex]);
+  const radius = Math.max(0, Math.min(5, pageWindowRadius));
   
-  let leftPage = centerPageIndex - 1;
-  let rightPage = centerPageIndex + 1;
-  
-  // Calculate total words in current centered page
-  let currentText = pageTexts[centerPageIndex] || '';
-  let currentWordCount = countWords(currentText);
+  const minPageIndex = Math.max(0, centerPageIndex - radius);
+  const maxPageIndex = Math.min(pageTexts.length - 1, centerPageIndex + radius);
 
-  // Expand page by page until we reach the targetWordCount
-  while (currentWordCount < targetWordCount && (leftPage >= 0 || rightPage < pageTexts.length)) {
-    // Alternately add from left and right to keep it centered
-    if (leftPage >= 0) {
-      const leftText = pageTexts[leftPage] || '';
-      currentText = leftText + '\n\n' + currentText;
-      currentWordCount += countWords(leftText);
-      pagesIncluded.add(leftPage);
-      leftPage--;
-    }
-    
-    if (currentWordCount >= targetWordCount) break;
+  const pagesIncluded = new Set<number>();
+  const textChunks: string[] = [];
 
-    if (rightPage < pageTexts.length) {
-      const rightText = pageTexts[rightPage] || '';
-      currentText = currentText + '\n\n' + rightText;
-      currentWordCount += countWords(rightText);
-      pagesIncluded.add(rightPage);
-      rightPage++;
+  for (let idx = minPageIndex; idx <= maxPageIndex; idx++) {
+    pagesIncluded.add(idx);
+    const chunk = pageTexts[idx]?.trim();
+    if (chunk) {
+      textChunks.push(chunk);
     }
   }
 
-  // If we have extra expansion words on each side requested, we can slice the text
-  // or grab more words. Grabbing more words is simple: we can just increase our target
-  // word count or we can slice from the text.
-  // To keep it clean, let's expand the page boundaries further or slice characters.
-  // Actually, adding more pages is the most robust way in a PDF because pages contain complete paragraphs.
-  // Let's add extra words on each side if extraWordsSide is requested.
+  let currentText = textChunks.join('\n\n');
+
+  // If automatic context expansion is needed beyond the user's configured radius
   if (extraWordsSide > 0) {
-    const extraPagesNeeded = Math.ceil(extraWordsSide / 300); // assume ~300 words per page
+    let leftPage = minPageIndex - 1;
+    let rightPage = maxPageIndex + 1;
+    const extraPagesNeeded = Math.ceil(extraWordsSide / 300); // approx ~300 words per page
+    
     for (let i = 0; i < extraPagesNeeded; i++) {
       if (leftPage >= 0) {
-        const leftText = pageTexts[leftPage] || '';
-        currentText = leftText + '\n\n' + currentText;
+        const leftText = pageTexts[leftPage]?.trim() || '';
+        if (leftText) {
+          currentText = leftText + '\n\n' + currentText;
+        }
         pagesIncluded.add(leftPage);
         leftPage--;
       }
       if (rightPage < pageTexts.length) {
-        const rightText = pageTexts[rightPage] || '';
-        currentText = currentText + '\n\n' + rightText;
+        const rightText = pageTexts[rightPage]?.trim() || '';
+        if (rightText) {
+          currentText = currentText + '\n\n' + rightText;
+        }
         pagesIncluded.add(rightPage);
         rightPage++;
       }

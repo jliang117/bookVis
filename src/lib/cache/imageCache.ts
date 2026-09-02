@@ -39,10 +39,12 @@ export function generateCacheKey(
   bookHash: string,
   currentPage: number,
   text: string,
-  style: string
+  style: string,
+  timestamp?: number
 ): string {
   const textHash = hashString(text);
-  return `${bookHash}::p${currentPage}::s${style}::t${textHash}`;
+  const ts = timestamp || Date.now();
+  return `${bookHash}::p${currentPage}::s${style}::t${textHash}::ts${ts}`;
 }
 
 export class ImageCache {
@@ -94,6 +96,43 @@ export class ImageCache {
     } catch (e) {
       console.warn('Cache retrieval failed:', e);
       return null;
+    }
+  }
+
+  /**
+   * Get all cached images for a specific book and page, sorted chronologically
+   */
+  public static async getForPage(bookHash: string, currentPage: number): Promise<CacheEntry[]> {
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.openCursor();
+        const results: CacheEntry[] = [];
+
+        request.onsuccess = (event) => {
+          const cursor = request.result;
+          if (cursor) {
+            const entry = cursor.value as CacheEntry;
+            if (entry.bookHash === bookHash && entry.currentPage === currentPage) {
+              results.push(entry);
+            }
+            cursor.continue();
+          } else {
+            // Sort chronologically (oldest first: #1, #2, #3...)
+            results.sort((a, b) => (a.generatedAt || 0) - (b.generatedAt || 0));
+            resolve(results);
+          }
+        };
+
+        request.onerror = () => {
+          reject(request.error);
+        };
+      });
+    } catch (e) {
+      console.warn('Cache page list fetch failed:', e);
+      return [];
     }
   }
 
