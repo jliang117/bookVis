@@ -5,24 +5,31 @@ import { useAppStore } from '../lib/store';
 import { STYLE_MODIFIERS } from '../lib/prompts/styles';
 
 const STYLES: ArtStyle[] = [
-  'Fantasy Illustration',
-  'Realistic',
-  'Studio Ghibli',
+  'Dark & Epic Fantasy',
+  'Cinematic Realism',
+  'Anime & Ghibli',
   'Oil Painting',
   'Watercolor',
-  'Anime',
-  'Dark Fantasy',
-  'Comic Book',
-  'Children\'s Book',
-  'Pixel Art',
-  'Cinematic',
-  'Concept Art',
+  'Comic Book & Graphic Novel',
+  'Children\'s Storybook',
+  'Pixel Art (16-Bit)',
+  'Vintage Woodcut & Engraving',
+  'Stained Glass & Mosaic',
+  'Claymation & Stop-Motion',
+  'Ukiyo-e Woodblock',
+  'Papercraft Diorama',
+  'Cyberpunk & Neon',
+  'Film Noir',
   'Impressionist',
-  'Noir',
-  'Cyberpunk',
+  'Concept Art',
 ];
 
-export default function ArtStyleSelector() {
+interface ArtStyleSelectorProps {
+  fullWidth?: boolean;
+  className?: string;
+}
+
+export default function ArtStyleSelector({ fullWidth = false, className = '' }: ArtStyleSelectorProps) {
   const selectedStyle = useAppStore((state) => state.selectedStyle);
   const setSelectedStyle = useAppStore((state) => state.setSelectedStyle);
   const [isOpen, setIsOpen] = useState(false);
@@ -40,18 +47,22 @@ export default function ArtStyleSelector() {
   }, []);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className={`relative ${fullWidth ? 'w-full' : ''}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2 bg-[#161616] border border-white/10 hover:border-white/20 hover:bg-[#222222] rounded-xl font-medium text-sm text-slate-200 transition-all shadow-md active:scale-95 cursor-pointer"
+        className={`flex items-center justify-between gap-2 px-3 sm:px-4 py-2 bg-[#161616] border border-white/10 hover:border-white/20 hover:bg-[#222222] rounded-xl font-medium text-xs sm:text-sm text-slate-200 transition-all shadow-md active:scale-95 cursor-pointer ${
+          fullWidth ? 'w-full' : ''
+        } ${className}`}
       >
-        <Palette className="w-4 h-4 text-indigo-400" />
-        <span className="truncate max-w-[120px] sm:max-w-none">{selectedStyle}</span>
-        <ChevronDown className="w-4 h-4 text-slate-500" />
+        <div className="flex items-center gap-1.5 min-w-0 truncate">
+          <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+          <span className="truncate max-w-[120px] sm:max-w-none text-xs sm:text-sm font-semibold sm:font-medium">{selectedStyle}</span>
+        </div>
+        <ChevronDown className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 max-h-96 overflow-y-auto bg-[#111111] border border-white/10 rounded-2xl shadow-2xl z-50 py-1.5 scrollbar-thin scrollbar-thumb-white/5">
+        <div className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto bg-[#111111] border border-white/10 rounded-2xl shadow-2xl z-50 py-1.5 scrollbar-thin scrollbar-thumb-white/5">
           <div className="px-3.5 py-1.5 border-b border-white/5 mb-1">
             <span className="text-[10px] font-bold text-slate-500 tracking-wider uppercase">
               Visual Rendering Styles

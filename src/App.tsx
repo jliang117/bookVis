@@ -32,24 +32,42 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col text-slate-200 font-sans animate-fade-in">
       {/* Dynamic Header */}
-      <header className="sticky top-0 z-40 bg-[#0f0f0f]/90 border-b border-white/10 backdrop-blur-md px-6 py-4 shadow-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-900/30">
-              <Book className="w-5 h-5 text-slate-100 fill-white/10" />
+      <header className="sticky top-0 z-40 bg-[#0f0f0f]/95 border-b border-white/10 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 shadow-md">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+          {/* Brand Header & Mobile Quick Info */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-900/30 shrink-0">
+                <Book className="w-4 h-4 sm:w-5 sm:h-5 text-slate-100 fill-white/10" />
+              </div>
+              <div>
+                <h1 className="text-sm sm:text-base font-extrabold text-slate-100 tracking-tight leading-none">
+                  AI Book Visualizer
+                </h1>
+                <p className="text-[9px] sm:text-[10px] font-semibold text-slate-500 tracking-wider uppercase mt-0.5 sm:mt-1">
+                  Visual companion platform
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-base font-extrabold text-slate-100 tracking-tight leading-none">
-                AI Book Visualizer
-              </h1>
-              <p className="text-[10px] font-semibold text-slate-500 tracking-wider uppercase mt-1">
-                Visual companion platform
-              </p>
-            </div>
+
+            {/* If no book loaded on mobile, show quick buttons on top right */}
+            {!fileHash && (
+              <div className="flex items-center gap-2 md:hidden">
+                <button
+                  onClick={() => setIsApiKeysOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-[#161616] text-slate-300 hover:text-white border border-white/10 rounded-xl text-xs font-medium"
+                  title="Configure API Keys"
+                >
+                  <Key className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-[11px]">API Keys</span>
+                </button>
+                <SettingsMenu />
+              </div>
+            )}
           </div>
 
-          {/* Controls Bar */}
-          <div className="flex items-center gap-3">
+          {/* Desktop Controls Bar (Hidden on mobile when book loaded) */}
+          <div className="hidden md:flex items-center gap-3">
             {/* API Keys Configuration Button */}
             <button
               onClick={() => setIsApiKeysOpen(true)}
@@ -57,10 +75,10 @@ export default function App() {
               title="Configure Custom API Keys"
             >
               <Key className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden sm:inline">API Keys</span>
+              <span>API Keys</span>
             </button>
 
-            {/* Loaded Book Info Toolbar */}
+            {/* Loaded Book Info Toolbar for Desktop */}
             {fileHash && (
               <motion.div
                 initial={{ opacity: 0, y: -5 }}
@@ -96,7 +114,7 @@ export default function App() {
                   title="Start a new scene or upload a new book"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">New Scene</span>
+                  <span>New Scene</span>
                 </button>
 
                 {/* Settings Gear Menu */}
@@ -104,9 +122,58 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* If no book is loaded yet, also provide settings access */}
+            {/* If no book is loaded yet, provide settings access on desktop */}
             {!fileHash && <SettingsMenu />}
           </div>
+
+          {/* Mobile Toolbar when Book is loaded (2 collapsed rows) */}
+          {fileHash && (
+            <div className="flex md:hidden flex-col gap-2 pt-2 border-t border-white/10 w-full">
+              {/* Row 1: Generate Button + Style Dropdown */}
+              <div className="grid grid-cols-2 gap-2 w-full">
+                <button
+                  onClick={() => generateVisualization()}
+                  disabled={isLoading}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/20 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer w-full"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-200" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  )}
+                  <span>Generate</span>
+                </button>
+
+                <ArtStyleSelector fullWidth={true} />
+              </div>
+
+              {/* Row 2: 3 Icons (API Keys, New Scene, Settings) */}
+              <div className="grid grid-cols-3 gap-2 w-full">
+                {/* Icon 1: API Keys */}
+                <button
+                  onClick={() => setIsApiKeysOpen(true)}
+                  className="flex items-center justify-center gap-1.5 px-2 py-2 bg-[#161616] text-slate-300 hover:text-white hover:bg-[#222222] border border-white/10 rounded-xl text-xs font-medium transition-all active:scale-95 cursor-pointer w-full"
+                  title="Configure API Keys"
+                >
+                  <Key className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-[11px]">API Keys</span>
+                </button>
+
+                {/* Icon 2: New Scene */}
+                <button
+                  onClick={resetStore}
+                  className="flex items-center justify-center gap-1.5 px-2 py-2 bg-[#161616] text-slate-300 hover:text-white hover:bg-[#222222] border border-white/10 rounded-xl text-xs font-medium transition-all active:scale-95 cursor-pointer w-full"
+                  title="Start a new scene"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px]">New Scene</span>
+                </button>
+
+                {/* Icon 3: Settings */}
+                <SettingsMenu fullWidth={true} showLabel={true} />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 

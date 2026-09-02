@@ -20,21 +20,23 @@ export interface SceneJSON {
 }
 
 export type ArtStyle =
-  | 'Realistic'
-  | 'Studio Ghibli'
+  | 'Dark & Epic Fantasy'
+  | 'Cinematic Realism'
+  | 'Anime & Ghibli'
   | 'Oil Painting'
   | 'Watercolor'
-  | 'Anime'
-  | 'Dark Fantasy'
-  | 'Comic Book'
-  | 'Children\'s Book'
-  | 'Pixel Art'
-  | 'Cinematic'
-  | 'Concept Art'
+  | 'Comic Book & Graphic Novel'
+  | 'Children\'s Storybook'
+  | 'Pixel Art (16-Bit)'
+  | 'Vintage Woodcut & Engraving'
+  | 'Stained Glass & Mosaic'
+  | 'Claymation & Stop-Motion'
+  | 'Ukiyo-e Woodblock'
+  | 'Papercraft Diorama'
+  | 'Cyberpunk & Neon'
+  | 'Film Noir'
   | 'Impressionist'
-  | 'Noir'
-  | 'Cyberpunk'
-  | 'Fantasy Illustration';
+  | 'Concept Art';
 
 export type GenerationStatus = 'idle' | 'extracting_scene' | 'generating_image' | 'success' | 'failed';
 

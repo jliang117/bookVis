@@ -2,7 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Settings, Image as ImageIcon, Terminal, X, Sliders, Layers, Plus, Minus } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 
-export default function SettingsMenu() {
+interface SettingsMenuProps {
+  fullWidth?: boolean;
+  showLabel?: boolean;
+  className?: string;
+}
+
+export default function SettingsMenu({ fullWidth = false, showLabel, className = '' }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -34,25 +40,31 @@ export default function SettingsMenu() {
   };
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className={`relative ${fullWidth ? 'w-full' : ''}`} ref={menuRef}>
       {/* Settings Gear Button */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
+        className={`flex items-center justify-center gap-1.5 px-2.5 py-2 border rounded-xl text-xs font-medium transition-all active:scale-95 cursor-pointer ${
+          fullWidth ? 'w-full' : ''
+        } ${
           isOpen
             ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200 shadow-md'
-            : 'bg-[#161616] text-slate-400 hover:text-slate-100 hover:bg-[#222222] border-white/10'
-        }`}
+            : 'bg-[#161616] text-slate-300 hover:text-white hover:bg-[#222222] border-white/10'
+        } ${className}`}
         title="Visualizer Settings & Preferences"
         aria-label="Settings"
       >
-        <Settings className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? 'rotate-90 text-indigo-400' : ''}`} />
-        <span className="hidden sm:inline">Settings</span>
+        <Settings className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? 'rotate-90 text-indigo-400' : 'text-slate-400'}`} />
+        {showLabel !== undefined ? (
+          showLabel && <span className="text-[11px]">Settings</span>
+        ) : (
+          <span className="hidden sm:inline text-[11px] font-semibold">Settings</span>
+        )}
       </button>
 
       {/* Settings Dropdown Popover */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-[#141414] border border-white/15 rounded-2xl shadow-2xl p-4 z-50 backdrop-blur-xl animate-fade-in">
+        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-[#141414] border border-white/15 rounded-2xl shadow-2xl p-4 z-50 backdrop-blur-xl animate-fade-in">
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
             <div className="flex items-center gap-2">
