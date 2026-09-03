@@ -216,8 +216,8 @@ export default function ImagePanel() {
           <span className="text-xs font-bold text-slate-100 uppercase tracking-wider sm:hidden">
             {isFullscreen ? 'Fullscreen' : 'Canvas'}
           </span>
-          {/* Book / Leaflet menu right after title header */}
-          <BookImagesMenu />
+          {/* Book / Leaflet menu right after title header (icon and count only) */}
+          <BookImagesMenu showLabel={false} />
         </div>
         
         {/* Right side controls: Downloads + Cached image switcher + Regenerate button + Fullscreen */}

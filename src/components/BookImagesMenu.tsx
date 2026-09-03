@@ -20,6 +20,7 @@ import { CacheEntry } from '../lib/cache/imageCache';
 interface BookImagesMenuProps {
   className?: string;
   isFullscreenReader?: boolean;
+  showLabel?: boolean;
 }
 
 type SortField = 'page' | 'date';
@@ -28,6 +29,7 @@ type SortOrder = 'asc' | 'desc';
 export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
   className = '',
   isFullscreenReader = false,
+  showLabel = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>('page');
@@ -49,6 +51,16 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
     fileHash,
   } = useAppStore();
 
+  const handleCloseFullscreenModal = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setFullscreenModalImage(null);
+    if (isFullscreenReader) {
+      setIsOpen(true);
+    }
+  };
+
   // Keep a periodic timer to update "newer than 1 minute" red dot live
   useEffect(() => {
     const timer = setInterval(() => {
@@ -60,6 +72,10 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      if (fullscreenModalImage) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('#fullscreen-illustration-modal')) return;
+
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
@@ -68,18 +84,26 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, fullscreenModalImage]);
 
-  // Handle escape key to close modal
+  // Handle escape key to close modal or menu
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && fullscreenModalImage) {
-        setFullscreenModalImage(null);
+      if (e.key === 'Escape') {
+        if (fullscreenModalImage) {
+          e.stopPropagation();
+          e.preventDefault();
+          handleCloseFullscreenModal();
+        } else if (isOpen) {
+          e.stopPropagation();
+          e.preventDefault();
+          setIsOpen(false);
+        }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fullscreenModalImage]);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [fullscreenModalImage, isOpen, isFullscreenReader]);
 
   // Active / processing tasks in queue
   const activeTasks = generationQueue.filter(
@@ -117,7 +141,11 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
 
   const handleSelectImage = (item: CacheEntry) => {
     selectBookImage(item);
-    setIsOpen(false);
+    if (isFullscreenReader) {
+      setFullscreenModalImage(item);
+    } else {
+      setIsOpen(false);
+    }
   };
 
   const handleSelectTask = (taskPage: number) => {
@@ -127,8 +155,8 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
 
   const handleOpenFullscreenImage = (e: React.MouseEvent, item: CacheEntry) => {
     e.stopPropagation();
+    selectBookImage(item);
     setFullscreenModalImage(item);
-    setIsOpen(false);
   };
 
   const handleDownloadCardImage = (e: React.MouseEvent, item: CacheEntry) => {
@@ -193,19 +221,19 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
   return (
     <>
       <div className={`relative inline-block ${className}`} ref={menuRef}>
-        {/* Book / Leaflet Icon Button */}
+        {/* Book / Leaflet Icon Button (Icon and number of images) */}
         <button
           id="book-images-menu-button"
           onClick={() => setIsOpen((prev) => !prev)}
-          className={`flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
             isOpen
               ? 'bg-indigo-600/30 border-indigo-500/60 text-white shadow-md'
               : isGenerating
               ? 'bg-indigo-950/40 border-indigo-500/40 text-indigo-200 hover:bg-indigo-900/50'
               : 'bg-[#181818] hover:bg-[#222222] border-white/10 text-slate-300 hover:text-white'
           }`}
-          title="View Illustrations Book and generation queue"
-          aria-label="Illustrations Book menu"
+          title={`Illustrations (${completedCount})`}
+          aria-label="Illustrations"
           aria-expanded={isOpen}
         >
           <div className="relative flex items-center justify-center">
@@ -220,20 +248,16 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
             )}
           </div>
 
-          <span className="hidden sm:inline font-medium">Illustrations Book</span>
-
-          {/* Count or Processing Badge */}
+          {/* Number of images or processing spinner */}
           {isGenerating ? (
             <span className="flex items-center gap-1 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-mono font-semibold">
               <Loader2 className="w-2.5 h-2.5 animate-spin" />
               <span>{activeTasks.length}</span>
             </span>
           ) : (
-            completedCount > 0 && (
-              <span className="text-[10px] bg-white/10 text-slate-200 px-1.5 py-0.2 rounded-full font-mono">
-                {completedCount}
-              </span>
-            )
+            <span className="text-[10px] bg-white/10 text-slate-200 px-1.5 py-0.5 rounded-full font-mono font-medium">
+              {completedCount}
+            </span>
           )}
         </button>
 
@@ -526,19 +550,23 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       {fullscreenModalImage && (
         <div
           id="fullscreen-illustration-modal"
-          className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex flex-col animate-fade-in"
+          onClick={handleCloseFullscreenModal}
+          className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex flex-col animate-fade-in cursor-zoom-out"
           role="dialog"
           aria-modal="true"
           aria-label={`Illustration for Page ${fullscreenModalImage.currentPage}`}
         >
           {/* Header bar with Back / Close button */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-white/10 bg-[#121212]/80 backdrop-blur-md">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-white/10 bg-[#121212]/80 backdrop-blur-md cursor-default"
+          >
             <div className="flex items-center gap-3">
               <button
                 id="close-fullscreen-image-button"
-                onClick={() => setFullscreenModalImage(null)}
+                onClick={handleCloseFullscreenModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-md"
-                title="Back to Fullscreen Reader"
+                title="Back to Fullscreen Reader (with Illustrations Book)"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to Reader</span>
@@ -583,7 +611,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               </button>
 
               <button
-                onClick={() => setFullscreenModalImage(null)}
+                onClick={handleCloseFullscreenModal}
                 className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
                 title="Close (Esc)"
               >
@@ -593,17 +621,24 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
           </div>
 
           {/* Modal Main Content: Large Image Display */}
-          <div className="flex-1 flex items-center justify-center p-4 sm:p-8 overflow-hidden relative">
+          <div
+            className="flex-1 flex items-center justify-center p-4 sm:p-8 overflow-hidden relative cursor-zoom-out"
+            onClick={handleCloseFullscreenModal}
+          >
             <img
+              onClick={(e) => e.stopPropagation()}
               src={fullscreenModalImage.imageUrl}
               alt={`Illustration for Page ${fullscreenModalImage.currentPage} - ${fullscreenModalImage.selectedStyle}`}
-              className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/15 animate-zoom-in"
+              className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/15 animate-zoom-in cursor-default"
             />
           </div>
 
           {/* Bottom caption / scene detail bar */}
           {fullscreenModalImage.sceneJson && (
-            <div className="px-4 sm:px-8 py-3 bg-[#121212]/90 border-t border-white/10 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="px-4 sm:px-8 py-3 bg-[#121212]/90 border-t border-white/10 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-2 cursor-default"
+            >
               <p className="text-xs text-slate-300 max-w-4xl truncate">
                 <span className="font-semibold text-white">Scene summary: </span>
                 {fullscreenModalImage.sceneJson.visualSceneSummary ||
