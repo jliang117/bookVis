@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AppState, ArtStyle, GenerationStatus, SceneJSON, DeveloperTelemetry, ApiKeys, ChapterInfo } from '../types';
+import { AppState, ArtStyle, GenerationStatus, SceneJSON, DeveloperTelemetry, ApiKeys, ChapterInfo, CachedImageItem, GenerationTask } from '../types';
 import { extractTextWindow, countWords, EXTRACTOR_CONFIG } from './reader/textExtractor';
 import { buildPrompt } from './prompts/promptBuilder';
 import { ImageCache, generateCacheKey, CacheEntry, hashString } from './cache/imageCache';
@@ -8,8 +8,9 @@ interface AppActions {
   setPageTexts: (texts: string[], fileName: string, fileHash: string, chapters?: ChapterInfo[]) => void;
   setCurrentPage: (page: number) => void;
   setSelectedStyle: (style: ArtStyle) => void;
-  generateVisualization: (forceRegenerate?: boolean) => Promise<void>;
+  generateVisualization: (forceRegenerate?: boolean, targetPage?: number, targetStyle?: ArtStyle) => Promise<void>;
   selectCachedImage: (key: string) => void;
+  selectBookImage: (entry: CachedImageItem) => void;
   clearCache: () => Promise<void>;
   resetStore: () => void;
   setApiKeys: (keys: ApiKeys) => void;
@@ -19,6 +20,7 @@ interface AppActions {
   setPdfZoom: (zoom: number) => void;
   setEpubFontSize: (size: number) => void;
   setDocumentType: (type: 'pdf' | 'epub' | 'text' | null) => void;
+  loadAllBookImages: () => Promise<void>;
 }
 
 const initialTelemetry: DeveloperTelemetry = {
@@ -248,527 +250,669 @@ async function clientGenerateImage(prompt: string, apiKey: string): Promise<stri
   return imageUrl;
 }
 
-export const useAppStore = create<AppState & AppActions>((set, get) => ({
-  // State
-  fileHash: null,
-  fileName: null,
-  currentPage: 1,
-  totalPages: 0,
-  extractedWindow: '',
-  extractedScene: null,
-  selectedStyle: 'Dark & Epic Fantasy',
-  imageUrl: null,
-  generationStatus: 'idle',
-  generatedAt: null,
-  telemetry: null,
-  error: null,
-  apiKeys: getInitialApiKeys(),
-  chapters: [],
-  cachedImages: [],
-  activeCacheKey: null,
-  showLastImageOnPageChange: getInitialSettings().showLastImageOnPageChange,
-  showDeveloperTelemetry: getInitialSettings().showDeveloperTelemetry,
-  windowSize: getInitialSettings().windowSize,
-  pdfZoom: getInitialSettings().pdfZoom,
-  epubFontSize: getInitialSettings().epubFontSize,
-  documentType: null,
+export const useAppStore = create<AppState & AppActions>((set, get) => {
+  let isProcessingQueue = false;
 
-  // Private states not exposed directly in AppState
-  pageTexts: [] as string[],
+  const processQueue = async () => {
+    if (isProcessingQueue) return;
+    isProcessingQueue = true;
 
-  // Actions
-  setPdfZoom: (zoom) => {
-    const clamped = Math.max(50, Math.min(250, Math.round(zoom)));
     try {
-      localStorage.setItem('visual_reader_pdf_zoom', String(clamped));
-    } catch (e) {
-      console.error(e);
-    }
-    set({ pdfZoom: clamped });
-  },
+      while (true) {
+        const { generationQueue, fileHash, pageTexts, windowSize, apiKeys } = get();
+        if (!fileHash || pageTexts.length === 0) break;
 
-  setEpubFontSize: (size) => {
-    const clamped = Math.max(50, Math.min(250, Math.round(size)));
-    try {
-      localStorage.setItem('visual_reader_epub_font_size', String(clamped));
-    } catch (e) {
-      console.error(e);
-    }
-    set({ epubFontSize: clamped });
-  },
+        const nextTask = generationQueue.find((t) => t.status === 'queued');
+        if (!nextTask) break;
 
-  setDocumentType: (type) => {
-    set({ documentType: type });
-  },
+        const taskId = nextTask.id;
+        const taskPage = nextTask.page;
+        const taskStyle = nextTask.style;
 
-  setWindowSize: (size) => {
-    const clamped = Math.max(0, Math.min(5, Math.floor(size) || 0));
-    try {
-      localStorage.setItem('visual_reader_window_size', String(clamped));
-    } catch (e) {
-      console.error(e);
-    }
-    set({ windowSize: clamped });
-  },
+        // Mark task as extracting_scene
+        set((state) => ({
+          generationQueue: state.generationQueue.map((t) =>
+            t.id === taskId ? { ...t, status: 'extracting_scene' as const } : t
+          ),
+          ...(get().currentPage === taskPage ? { generationStatus: 'extracting_scene', error: null } : {})
+        }));
 
-  setShowLastImageOnPageChange: (enabled) => {
-    try {
-      localStorage.setItem('visual_reader_show_last_image', String(enabled));
-    } catch (e) {
-      console.error(e);
-    }
-    set({ showLastImageOnPageChange: enabled });
-  },
+        const pipelineStart = Date.now();
+        let currentExpansionWords = 0;
+        let expansionAttempts = 0;
+        let finalSceneJson: SceneJSON | null = null;
+        let finalExtractedWindow = '';
+        let contextAccepted = false;
+        let telemetryTokenUsage = 0;
 
-  setShowDeveloperTelemetry: (enabled) => {
-    try {
-      localStorage.setItem('visual_reader_show_telemetry', String(enabled));
-    } catch (e) {
-      console.error(e);
-    }
-    set({ showDeveloperTelemetry: enabled });
-  },
+        const requestHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (apiKeys?.gemini) {
+          requestHeaders['x-gemini-api-key'] = apiKeys.gemini;
+        }
 
-  setApiKeys: (keys) => {
-    try {
-      localStorage.setItem('visual_reader_api_keys', JSON.stringify(keys));
-    } catch (e) {
-      console.error(e);
-    }
-    set({ apiKeys: keys });
-  },
+        try {
+          // --- PIPELINE STEP 1: Text Slicing & Scene Extraction (LLM) ---
+          while (expansionAttempts <= 5) {
+            const { text } = extractTextWindow(
+              pageTexts,
+              taskPage, // ALWAYS USE the exact target page for this task
+              windowSize,
+              currentExpansionWords
+            );
+            finalExtractedWindow = text;
 
-  setPageTexts: async (texts, fileName, fileHash, chapters = []) => {
-    const isPdf = Boolean((window as any).__CURRENT_PDF_DOC__) || (fileName ? fileName.toLowerCase().endsWith('.pdf') : false);
-    const isEpub = fileName ? fileName.toLowerCase().endsWith('.epub') : false;
-    const documentType = isPdf ? 'pdf' : (isEpub ? 'epub' : 'text');
+            let sceneData: SceneJSON;
+            let tokensUsed = 0;
 
-    set({
-      pageTexts: texts,
-      fileName,
-      fileHash,
-      documentType,
-      chapters: chapters || [],
-      currentPage: 1,
-      totalPages: texts.length,
-      extractedWindow: '',
-      extractedScene: null,
-      imageUrl: null,
-      generationStatus: 'idle',
-      generatedAt: null,
-      telemetry: null,
-      error: null,
-      cachedImages: [],
-      activeCacheKey: null,
-    });
+            try {
+              const payload = { text };
+              const extractRes = await fetch('/api/extract-scene', {
+                method: 'POST',
+                headers: requestHeaders,
+                body: JSON.stringify(payload),
+              });
+              const extractRawText = await extractRes.text();
+              let extractData;
+              try {
+                extractData = JSON.parse(extractRawText);
+              } catch (parseErr: any) {
+                throw new Error(`Failed to parse scene extraction response from server (Status ${extractRes.status}).`);
+              }
+              if (!extractRes.ok) {
+                throw new Error(extractData.error || `Server error during scene extraction (Status ${extractRes.status}).`);
+              }
+              sceneData = extractData.data;
+              tokensUsed = extractData.approxTokens || 0;
+            } catch (serverError: any) {
+              if (apiKeys?.gemini) {
+                sceneData = await clientExtractScene(text, apiKeys.gemini);
+                tokensUsed = Math.ceil(text.length / 4) + 500;
+              } else {
+                throw serverError;
+              }
+            }
 
-    // Check if we already have cached visualizations for page 1
-    if (fileHash && texts.length > 0) {
-      const pageEntries = await ImageCache.getForPage(fileHash, 1);
-      if (pageEntries.length > 0) {
-        const selectedStyle = get().selectedStyle;
-        const matching = pageEntries.find(e => e.selectedStyle === selectedStyle) || pageEntries[pageEntries.length - 1];
-        set({
-          cachedImages: pageEntries,
-          activeCacheKey: matching.key,
-          imageUrl: matching.imageUrl,
-          selectedStyle: matching.selectedStyle as ArtStyle,
-          generationStatus: 'success',
-          generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
-          telemetry: {
-            currentPage: 1,
-            windowSize: 0,
-            expansionAttempts: 0,
-            contextAccepted: true,
-            sceneJson: matching.sceneJson,
-            finalPrompt: buildPrompt(matching.sceneJson, matching.selectedStyle as ArtStyle),
-            cacheHit: true,
-            generationTimeMs: 0,
-            approxTokenUsage: 0,
+            telemetryTokenUsage += tokensUsed;
+
+            if (sceneData.enoughContext) {
+              finalSceneJson = sceneData;
+              contextAccepted = true;
+              break;
+            } else {
+              expansionAttempts++;
+              currentExpansionWords += EXTRACTOR_CONFIG.EXPANSION_WORD_COUNT;
+              if (currentExpansionWords > EXTRACTOR_CONFIG.MAX_EXPANSION_LIMIT) {
+                finalSceneJson = sceneData;
+                contextAccepted = false;
+                break;
+              }
+            }
           }
-        });
-      }
-    }
-  },
 
-  setCurrentPage: async (page) => {
-    const { totalPages, currentPage, selectedStyle, fileHash, pageTexts, imageUrl: prevImageUrl, showLastImageOnPageChange } = get();
-    if (page < 1 || page > totalPages || page === currentPage) return;
-    
-    set({
-      currentPage: page,
-      error: null,
-      imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
-      generationStatus: 'idle',
-      telemetry: null,
-      cachedImages: [],
-      activeCacheKey: null
-    });
-    
-    // Check if we already have cached visualizations for this page
-    if (fileHash && pageTexts.length > 0) {
-      const pageEntries = await ImageCache.getForPage(fileHash, page);
-      if (pageEntries.length > 0) {
-        const matching = pageEntries.find(e => e.selectedStyle === selectedStyle) || pageEntries[pageEntries.length - 1];
-        set({
-          cachedImages: pageEntries,
-          activeCacheKey: matching.key,
-          imageUrl: matching.imageUrl,
-          selectedStyle: matching.selectedStyle as ArtStyle,
-          generationStatus: 'success',
-          generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
-          telemetry: {
-            currentPage: page,
-            windowSize: 0,
-            expansionAttempts: 0,
-            contextAccepted: true,
-            sceneJson: matching.sceneJson,
-            finalPrompt: buildPrompt(matching.sceneJson, matching.selectedStyle as ArtStyle),
-            cacheHit: true,
-            generationTimeMs: 0,
-            approxTokenUsage: 0,
+          if (!finalSceneJson) {
+            throw new Error('Pipeline failed during scene extraction.');
           }
-        });
-      }
-    }
-  },
 
-  setSelectedStyle: async (style) => {
-    if (style === get().selectedStyle) return;
-    const { fileHash, currentPage, cachedImages, imageUrl: prevImageUrl, showLastImageOnPageChange } = get();
-    
-    // Check if we already have a cached image for this style on the current page
-    const matching = cachedImages.find(e => e.selectedStyle === style);
-    if (matching) {
+          // --- PIPELINE STEP 2: Prompt Builder ---
+          const finalPrompt = buildPrompt(finalSceneJson, taskStyle);
+          const textHash = hashString(finalExtractedWindow);
+
+          // Update task to generating_image
+          set((state) => ({
+            generationQueue: state.generationQueue.map((t) =>
+              t.id === taskId
+                ? { ...t, status: 'generating_image' as const, sceneJson: finalSceneJson, finalPrompt }
+                : t
+            ),
+            ...(get().currentPage === taskPage
+              ? {
+                  generationStatus: 'generating_image',
+                  extractedWindow: finalExtractedWindow,
+                  extractedScene: finalSceneJson,
+                }
+              : {})
+          }));
+
+          // --- PIPELINE STEP 3: Image Generation ---
+          let generatedImageUrl = '';
+          const imagePayload = { prompt: finalPrompt };
+
+          try {
+            const imageRes = await fetch('/api/generate-image', {
+              method: 'POST',
+              headers: requestHeaders,
+              body: JSON.stringify(imagePayload),
+            });
+            const imageRawText = await imageRes.text();
+            let imageData;
+            try {
+              imageData = JSON.parse(imageRawText);
+            } catch (parseErr: any) {
+              throw new Error(`Failed to parse image generation response (Status ${imageRes.status}).`);
+            }
+            if (!imageRes.ok) {
+              throw new Error(imageData.error || `Server error during image generation (Status ${imageRes.status}).`);
+            }
+            generatedImageUrl = imageData.imageUrl;
+          } catch (serverError: any) {
+            if (apiKeys?.gemini) {
+              generatedImageUrl = await clientGenerateImage(finalPrompt, apiKeys.gemini);
+            } else {
+              throw serverError;
+            }
+          }
+
+          // Save to IndexedDB cache
+          const now = Date.now();
+          const cacheKey = generateCacheKey(fileHash, taskPage, finalExtractedWindow, taskStyle, now);
+          const cacheEntry: CacheEntry = {
+            key: cacheKey,
+            bookHash: fileHash,
+            currentPage: taskPage,
+            textHash,
+            sceneJson: finalSceneJson,
+            selectedStyle: taskStyle,
+            imageUrl: generatedImageUrl,
+            generatedAt: now,
+          };
+          await ImageCache.set(cacheEntry);
+
+          const pipelineDuration = Date.now() - pipelineStart;
+
+          // Update state
+          set((state) => {
+            const updatedQueue = state.generationQueue.map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    status: 'success' as const,
+                    imageUrl: generatedImageUrl,
+                    completedAt: now,
+                    cacheKey,
+                  }
+                : t
+            );
+            const updatedAll = [
+              ...state.allBookImages.filter((e) => e.key !== cacheKey),
+              cacheEntry,
+            ];
+
+            const isUserOnThisPage = state.currentPage === taskPage;
+            if (isUserOnThisPage) {
+              const updatedCached = [
+                ...state.cachedImages.filter((e) => e.key !== cacheKey),
+                cacheEntry,
+              ];
+              return {
+                generationQueue: updatedQueue,
+                allBookImages: updatedAll,
+                cachedImages: updatedCached,
+                activeCacheKey: cacheKey,
+                imageUrl: generatedImageUrl,
+                selectedStyle: taskStyle,
+                generationStatus: 'success',
+                generatedAt: new Date(now).toLocaleTimeString(),
+                telemetry: {
+                  currentPage: taskPage,
+                  windowSize: countWords(finalExtractedWindow),
+                  expansionAttempts,
+                  contextAccepted,
+                  sceneJson: finalSceneJson,
+                  finalPrompt,
+                  cacheHit: false,
+                  generationTimeMs: pipelineDuration,
+                  approxTokenUsage: telemetryTokenUsage,
+                },
+              };
+            } else {
+              // User has navigated to another page while background generation was in flight
+              return {
+                generationQueue: updatedQueue,
+                allBookImages: updatedAll,
+              };
+            }
+          });
+        } catch (err: any) {
+          console.error(`Queue task ${taskId} error:`, err);
+          set((state) => ({
+            generationQueue: state.generationQueue.map((t) =>
+              t.id === taskId ? { ...t, status: 'failed' as const, error: err.message } : t
+            ),
+            ...(state.currentPage === taskPage
+              ? {
+                  generationStatus: 'failed',
+                  error: err.message || 'Error generating illustration',
+                }
+              : {})
+          }));
+        }
+      }
+    } finally {
+      isProcessingQueue = false;
+    }
+  };
+
+  return {
+    // State
+    fileHash: null,
+    fileName: null,
+    currentPage: 1,
+    totalPages: 0,
+    extractedWindow: '',
+    extractedScene: null,
+    selectedStyle: 'Dark & Epic Fantasy',
+    imageUrl: null,
+    generationStatus: 'idle',
+    generatedAt: null,
+    telemetry: null,
+    error: null,
+    apiKeys: getInitialApiKeys(),
+    chapters: [],
+    cachedImages: [],
+    allBookImages: [],
+    generationQueue: [],
+    activeCacheKey: null,
+    showLastImageOnPageChange: getInitialSettings().showLastImageOnPageChange,
+    showDeveloperTelemetry: getInitialSettings().showDeveloperTelemetry,
+    windowSize: getInitialSettings().windowSize,
+    pdfZoom: getInitialSettings().pdfZoom,
+    epubFontSize: getInitialSettings().epubFontSize,
+    documentType: null,
+
+    // Private states not exposed directly in AppState
+    pageTexts: [] as string[],
+
+    // Actions
+    loadAllBookImages: async () => {
+      const { fileHash } = get();
+      if (!fileHash) return;
+      const all = await ImageCache.getAllForBook(fileHash);
+      set({ allBookImages: all });
+    },
+
+    setPdfZoom: (zoom) => {
+      const clamped = Math.max(50, Math.min(250, Math.round(zoom)));
+      try {
+        localStorage.setItem('visual_reader_pdf_zoom', String(clamped));
+      } catch (e) {
+        console.error(e);
+      }
+      set({ pdfZoom: clamped });
+    },
+
+    setEpubFontSize: (size) => {
+      const clamped = Math.max(50, Math.min(250, Math.round(size)));
+      try {
+        localStorage.setItem('visual_reader_epub_font_size', String(clamped));
+      } catch (e) {
+        console.error(e);
+      }
+      set({ epubFontSize: clamped });
+    },
+
+    setDocumentType: (type) => {
+      set({ documentType: type });
+    },
+
+    setWindowSize: (size) => {
+      const clamped = Math.max(0, Math.min(5, Math.floor(size) || 0));
+      try {
+        localStorage.setItem('visual_reader_window_size', String(clamped));
+      } catch (e) {
+        console.error(e);
+      }
+      set({ windowSize: clamped });
+    },
+
+    setShowLastImageOnPageChange: (enabled) => {
+      try {
+        localStorage.setItem('visual_reader_show_last_image', String(enabled));
+      } catch (e) {
+        console.error(e);
+      }
+      set({ showLastImageOnPageChange: enabled });
+    },
+
+    setShowDeveloperTelemetry: (enabled) => {
+      try {
+        localStorage.setItem('visual_reader_show_telemetry', String(enabled));
+      } catch (e) {
+        console.error(e);
+      }
+      set({ showDeveloperTelemetry: enabled });
+    },
+
+    setApiKeys: (keys) => {
+      try {
+        localStorage.setItem('visual_reader_api_keys', JSON.stringify(keys));
+      } catch (e) {
+        console.error(e);
+      }
+      set({ apiKeys: keys });
+    },
+
+    setPageTexts: async (texts, fileName, fileHash, chapters = []) => {
+      const isPdf = Boolean((window as any).__CURRENT_PDF_DOC__) || (fileName ? fileName.toLowerCase().endsWith('.pdf') : false);
+      const isEpub = fileName ? fileName.toLowerCase().endsWith('.epub') : false;
+      const documentType = isPdf ? 'pdf' : (isEpub ? 'epub' : 'text');
+
       set({
-        selectedStyle: style,
-        activeCacheKey: matching.key,
-        imageUrl: matching.imageUrl,
+        pageTexts: texts,
+        fileName,
+        fileHash,
+        documentType,
+        chapters: chapters || [],
+        currentPage: 1,
+        totalPages: texts.length,
+        extractedWindow: '',
+        extractedScene: null,
+        imageUrl: null,
+        generationStatus: 'idle',
+        generatedAt: null,
+        telemetry: null,
+        error: null,
+        cachedImages: [],
+        allBookImages: [],
+        generationQueue: [],
+        activeCacheKey: null,
+      });
+
+      // Load all cached visualizations for this book
+      if (fileHash) {
+        const allEntries = await ImageCache.getAllForBook(fileHash);
+        set({ allBookImages: allEntries });
+
+        // Check page 1
+        if (texts.length > 0) {
+          const page1Entries = allEntries.filter((e) => e.currentPage === 1);
+          if (page1Entries.length > 0) {
+            const selectedStyle = get().selectedStyle;
+            const matching = page1Entries.find((e) => e.selectedStyle === selectedStyle) || page1Entries[page1Entries.length - 1];
+            set({
+              cachedImages: page1Entries,
+              activeCacheKey: matching.key,
+              imageUrl: matching.imageUrl,
+              selectedStyle: matching.selectedStyle as ArtStyle,
+              generationStatus: 'success',
+              generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
+              telemetry: {
+                currentPage: 1,
+                windowSize: 0,
+                expansionAttempts: 0,
+                contextAccepted: true,
+                sceneJson: matching.sceneJson,
+                finalPrompt: buildPrompt(matching.sceneJson, matching.selectedStyle as ArtStyle),
+                cacheHit: true,
+                generationTimeMs: 0,
+                approxTokenUsage: 0,
+              }
+            });
+          }
+        }
+      }
+    },
+
+    setCurrentPage: async (page) => {
+      const { totalPages, currentPage, selectedStyle, fileHash, pageTexts, imageUrl: prevImageUrl, showLastImageOnPageChange, generationQueue } = get();
+      if (page < 1 || page > totalPages || page === currentPage) return;
+      
+      // Check if there is an active/queued task for this exact page
+      const activeTask = generationQueue.find(
+        (t) => t.page === page && (t.status === 'queued' || t.status === 'extracting_scene' || t.status === 'generating_image')
+      );
+
+      set({
+        currentPage: page,
+        error: null,
+        imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
+        generationStatus: activeTask
+          ? (activeTask.status === 'queued' ? 'extracting_scene' : activeTask.status)
+          : 'idle',
+        telemetry: null,
+        cachedImages: [],
+        activeCacheKey: null
+      });
+      
+      // Check if we already have cached visualizations for this page
+      if (fileHash && pageTexts.length > 0) {
+        const pageEntries = await ImageCache.getForPage(fileHash, page);
+        if (pageEntries.length > 0) {
+          const matching = pageEntries.find(e => e.selectedStyle === selectedStyle) || pageEntries[pageEntries.length - 1];
+          if (!activeTask) {
+            set({
+              cachedImages: pageEntries,
+              activeCacheKey: matching.key,
+              imageUrl: matching.imageUrl,
+              selectedStyle: matching.selectedStyle as ArtStyle,
+              generationStatus: 'success',
+              generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
+              telemetry: {
+                currentPage: page,
+                windowSize: 0,
+                expansionAttempts: 0,
+                contextAccepted: true,
+                sceneJson: matching.sceneJson,
+                finalPrompt: buildPrompt(matching.sceneJson, matching.selectedStyle as ArtStyle),
+                cacheHit: true,
+                generationTimeMs: 0,
+                approxTokenUsage: 0,
+              }
+            });
+          } else {
+            set({ cachedImages: pageEntries });
+          }
+        }
+      }
+    },
+
+    setSelectedStyle: async (style) => {
+      if (style === get().selectedStyle) return;
+      const { fileHash, currentPage, cachedImages, imageUrl: prevImageUrl, showLastImageOnPageChange, generationQueue } = get();
+      
+      // Check if there is an active task for this page & style
+      const activeTask = generationQueue.find(
+        (t) => t.page === currentPage && t.style === style && (t.status === 'queued' || t.status === 'extracting_scene' || t.status === 'generating_image')
+      );
+
+      // Check if we already have a cached image for this style on the current page
+      const matching = cachedImages.find(e => e.selectedStyle === style);
+      if (matching) {
+        set({
+          selectedStyle: style,
+          activeCacheKey: matching.key,
+          imageUrl: matching.imageUrl,
+          generationStatus: 'success',
+          generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
+          telemetry: {
+            currentPage,
+            windowSize: 0,
+            expansionAttempts: 0,
+            contextAccepted: true,
+            sceneJson: matching.sceneJson,
+            finalPrompt: buildPrompt(matching.sceneJson, style),
+            cacheHit: true,
+            generationTimeMs: 0,
+            approxTokenUsage: 0,
+          }
+        });
+      } else {
+        set({
+          selectedStyle: style,
+          error: null,
+          imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
+          generationStatus: activeTask
+            ? (activeTask.status === 'queued' ? 'extracting_scene' : activeTask.status)
+            : 'idle',
+          telemetry: null,
+          activeCacheKey: null
+        });
+      }
+    },
+
+    selectCachedImage: (key: string) => {
+      const { cachedImages } = get();
+      const entry = cachedImages.find((c) => c.key === key);
+      if (!entry) return;
+
+      set({
+        activeCacheKey: entry.key,
+        imageUrl: entry.imageUrl,
+        selectedStyle: entry.selectedStyle as ArtStyle,
         generationStatus: 'success',
-        generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
+        generatedAt: new Date(entry.generatedAt).toLocaleTimeString(),
         telemetry: {
-          currentPage,
+          currentPage: entry.currentPage,
           windowSize: 0,
           expansionAttempts: 0,
           contextAccepted: true,
-          sceneJson: matching.sceneJson,
-          finalPrompt: buildPrompt(matching.sceneJson, style),
+          sceneJson: entry.sceneJson,
+          finalPrompt: buildPrompt(entry.sceneJson, entry.selectedStyle as ArtStyle),
           cacheHit: true,
           generationTimeMs: 0,
           approxTokenUsage: 0,
         }
       });
-    } else {
+    },
+
+    selectBookImage: async (entry: CachedImageItem) => {
+      const { fileHash } = get();
+      if (!fileHash) return;
+
+      const pageEntries = await ImageCache.getForPage(fileHash, entry.currentPage);
+
       set({
-        selectedStyle: style,
-        error: null,
-        imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
-        generationStatus: 'idle',
-        telemetry: null,
-        activeCacheKey: null
-      });
-    }
-  },
-
-  selectCachedImage: (key: string) => {
-    const { cachedImages } = get();
-    const entry = cachedImages.find((c) => c.key === key);
-    if (!entry) return;
-
-    set({
-      activeCacheKey: entry.key,
-      imageUrl: entry.imageUrl,
-      selectedStyle: entry.selectedStyle as ArtStyle,
-      generationStatus: 'success',
-      generatedAt: new Date(entry.generatedAt).toLocaleTimeString(),
-      telemetry: {
         currentPage: entry.currentPage,
-        windowSize: 0,
-        expansionAttempts: 0,
-        contextAccepted: true,
-        sceneJson: entry.sceneJson,
-        finalPrompt: buildPrompt(entry.sceneJson, entry.selectedStyle as ArtStyle),
-        cacheHit: true,
-        generationTimeMs: 0,
-        approxTokenUsage: 0,
-      }
-    });
-  },
-
-  clearCache: async () => {
-    const { fileHash } = get();
-    if (!fileHash) return;
-    await ImageCache.clearForBook(fileHash);
-    set({ cachedImages: [], activeCacheKey: null, imageUrl: null, generationStatus: 'idle', telemetry: null });
-  },
-
-  resetStore: () => {
-    (window as any).__CURRENT_PDF_DOC__ = null;
-    set({
-      fileHash: null,
-      fileName: null,
-      documentType: null,
-      currentPage: 1,
-      totalPages: 0,
-      extractedWindow: '',
-      extractedScene: null,
-      selectedStyle: 'Dark & Epic Fantasy',
-      imageUrl: null,
-      generationStatus: 'idle',
-      generatedAt: null,
-      telemetry: null,
-      error: null,
-      pageTexts: [],
-      chapters: [],
-      cachedImages: [],
-      activeCacheKey: null,
-    });
-  },
-
-  generateVisualization: async (forceRegenerate = false) => {
-    const { pageTexts, currentPage, selectedStyle, fileHash, generationStatus, apiKeys, windowSize } = get();
-    
-    if (pageTexts.length === 0 || !fileHash) return;
-    if (generationStatus === 'extracting_scene' || generationStatus === 'generating_image') return;
-
-    set({ generationStatus: 'extracting_scene', error: null });
-
-    const pipelineStart = Date.now();
-    let currentExpansionWords = 0;
-    let expansionAttempts = 0;
-    let finalSceneJson: SceneJSON | null = null;
-    let finalExtractedWindow = '';
-    let contextAccepted = false;
-    let telemetryTokenUsage = 0;
-
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (apiKeys?.gemini) {
-      requestHeaders['x-gemini-api-key'] = apiKeys.gemini;
-    }
-
-    // --- PIPELINE STEP 1: Text Slicing & Scene Extraction (LLM) ---
-    try {
-      while (expansionAttempts <= 5) { // 5 max attempts, up to ~500 extra words on each side
-        const { text, actualWordCount } = extractTextWindow(
-          pageTexts,
-          currentPage,
-          windowSize,
-          currentExpansionWords
-        );
-        
-        finalExtractedWindow = text;
-
-        let sceneData: SceneJSON;
-        let tokensUsed = 0;
-
-        try {
-          const payload = { text };
-          console.log('[CLIENT DEBUG] Sending scene extraction payload:', JSON.stringify(payload, null, 2));
-          
-          const extractRes = await fetch('/api/extract-scene', {
-            method: 'POST',
-            headers: requestHeaders,
-            body: JSON.stringify(payload),
-          });
-
-          const extractRawText = await extractRes.text();
-          console.log('[CLIENT DEBUG] Raw response from /api/extract-scene:', extractRawText);
-
-          let extractData;
-          try {
-            extractData = JSON.parse(extractRawText);
-          } catch (parseErr: any) {
-            console.error('[CLIENT ERROR] Failed to parse scene extraction response as JSON:', parseErr, 'Raw response text:', extractRawText);
-            throw new Error(`Failed to parse scene extraction response from server (Status ${extractRes.status}). ${parseErr.message || ''}`);
-          }
-
-          if (!extractRes.ok) {
-            throw new Error(extractData.error || `Server error during scene extraction (Status ${extractRes.status}).`);
-          }
-
-          sceneData = extractData.data;
-          tokensUsed = extractData.approxTokens || 0;
-
-        } catch (serverError: any) {
-          console.warn('[CLIENT WARNING] Server scene extraction failed or returned error. Checking direct client fallback...', serverError);
-          
-          if (apiKeys?.gemini) {
-            console.log('[CLIENT DEBUG] Fallback: Performing scene extraction directly from browser with client Gemini API key...');
-            try {
-              sceneData = await clientExtractScene(text, apiKeys.gemini);
-              tokensUsed = Math.ceil(text.length / 4) + 500;
-            } catch (clientErr: any) {
-              console.error('[CLIENT ERROR] Direct client scene extraction failed as well:', clientErr);
-              throw new Error(`Scene extraction failed: Server error (${serverError.message}) AND Direct Client Fallback error (${clientErr.message})`);
-            }
-          } else {
-            if (serverError.message.includes('Status 405') || serverError.message.includes('Method Not Allowed') || serverError.message.includes('405')) {
-              throw new Error(`Visualization Pipeline Error: Cloudflare/static environment detected (Method Not Allowed 405).\n\nTo run the applet on this custom hosting domain, please configure your own Gemini API Key in the top-right 'API Keys' modal!`);
-            }
-            throw serverError;
-          }
+        cachedImages: pageEntries.length > 0 ? pageEntries : [entry],
+        activeCacheKey: entry.key,
+        imageUrl: entry.imageUrl,
+        selectedStyle: entry.selectedStyle as ArtStyle,
+        generationStatus: 'success',
+        generatedAt: new Date(entry.generatedAt).toLocaleTimeString(),
+        error: null,
+        telemetry: {
+          currentPage: entry.currentPage,
+          windowSize: 0,
+          expansionAttempts: 0,
+          contextAccepted: true,
+          sceneJson: entry.sceneJson,
+          finalPrompt: buildPrompt(entry.sceneJson, entry.selectedStyle as ArtStyle),
+          cacheHit: true,
+          generationTimeMs: 0,
+          approxTokenUsage: 0,
         }
-
-        telemetryTokenUsage += tokensUsed;
-
-        if (sceneData.enoughContext) {
-          finalSceneJson = sceneData;
-          contextAccepted = true;
-          break;
-        } else {
-          // Expand the sliding window text
-          expansionAttempts++;
-          currentExpansionWords += EXTRACTOR_CONFIG.EXPANSION_WORD_COUNT;
-          
-          if (currentExpansionWords > EXTRACTOR_CONFIG.MAX_EXPANSION_LIMIT) {
-            // Reached maximum allowed expansion limit, proceed with what we have
-            finalSceneJson = sceneData;
-            contextAccepted = false;
-            break;
-          }
-        }
-      }
-
-      if (!finalSceneJson) {
-        throw new Error('Pipeline failed during scene extraction.');
-      }
-
-      set({ 
-        extractedWindow: finalExtractedWindow,
-        extractedScene: finalSceneJson
       });
+    },
 
-      // --- PIPELINE STEP 2: Prompt Builder & Caching Check ---
-      const finalPrompt = buildPrompt(finalSceneJson, selectedStyle);
-      const textHash = hashString(finalExtractedWindow);
+    clearCache: async () => {
+      const { fileHash } = get();
+      if (!fileHash) return;
+      await ImageCache.clearForBook(fileHash);
+      set({
+        cachedImages: [],
+        allBookImages: [],
+        generationQueue: [],
+        activeCacheKey: null,
+        imageUrl: null,
+        generationStatus: 'idle',
+        telemetry: null
+      });
+    },
 
-      // Check IndexedDB cache unless we are explicitly force-regenerating
+    resetStore: () => {
+      (window as any).__CURRENT_PDF_DOC__ = null;
+      set({
+        fileHash: null,
+        fileName: null,
+        documentType: null,
+        currentPage: 1,
+        totalPages: 0,
+        extractedWindow: '',
+        extractedScene: null,
+        selectedStyle: 'Dark & Epic Fantasy',
+        imageUrl: null,
+        generationStatus: 'idle',
+        generatedAt: null,
+        telemetry: null,
+        error: null,
+        pageTexts: [],
+        chapters: [],
+        cachedImages: [],
+        allBookImages: [],
+        generationQueue: [],
+        activeCacheKey: null,
+      });
+    },
+
+    generateVisualization: async (forceRegenerate = false, targetPage?: number, targetStyle?: ArtStyle) => {
+      const { pageTexts, currentPage, selectedStyle, fileHash, generationQueue } = get();
+      if (pageTexts.length === 0 || !fileHash) return;
+
+      const page = targetPage !== undefined ? targetPage : currentPage;
+      const style = targetStyle !== undefined ? targetStyle : selectedStyle;
+
+      // Check if there is already an active or queued generation task for this exact page and style
+      const existingTask = generationQueue.find(
+        (t) =>
+          t.page === page &&
+          t.style === style &&
+          (t.status === 'queued' || t.status === 'extracting_scene' || t.status === 'generating_image')
+      );
+
+      if (existingTask) {
+        // Already queued or generating in background
+        return;
+      }
+
+      // If not forceRegenerate, check if an image for this style already exists in cache
       if (!forceRegenerate) {
-        const pageEntries = await ImageCache.getForPage(fileHash, currentPage);
-        const existingForStyle = pageEntries.find(e => e.selectedStyle === selectedStyle);
+        const pageEntries = await ImageCache.getForPage(fileHash, page);
+        const existingForStyle = pageEntries.find((e) => e.selectedStyle === style);
         if (existingForStyle) {
-          const duration = Date.now() - pipelineStart;
-          set({
-            cachedImages: pageEntries,
-            activeCacheKey: existingForStyle.key,
-            imageUrl: existingForStyle.imageUrl,
-            generationStatus: 'success',
-            generatedAt: new Date(existingForStyle.generatedAt).toLocaleTimeString(),
-            telemetry: {
-              currentPage,
-              windowSize: countWords(finalExtractedWindow),
-              expansionAttempts,
-              contextAccepted,
-              sceneJson: existingForStyle.sceneJson || finalSceneJson,
-              finalPrompt,
-              cacheHit: true,
-              generationTimeMs: duration,
-              approxTokenUsage: telemetryTokenUsage,
-            }
-          });
+          if (get().currentPage === page) {
+            set({
+              cachedImages: pageEntries,
+              activeCacheKey: existingForStyle.key,
+              imageUrl: existingForStyle.imageUrl,
+              selectedStyle: style,
+              generationStatus: 'success',
+              generatedAt: new Date(existingForStyle.generatedAt).toLocaleTimeString(),
+              telemetry: {
+                currentPage: page,
+                windowSize: 0,
+                expansionAttempts: 0,
+                contextAccepted: true,
+                sceneJson: existingForStyle.sceneJson,
+                finalPrompt: buildPrompt(existingForStyle.sceneJson, style),
+                cacheHit: true,
+                generationTimeMs: 0,
+                approxTokenUsage: 0,
+              }
+            });
+          }
           return;
         }
       }
 
-      // --- PIPELINE STEP 3: Image Generation ---
-      set({ generationStatus: 'generating_image' });
-      const imageStart = Date.now();
-
-      let generatedImageUrl = '';
-      const imagePayload = { prompt: finalPrompt };
-
-      try {
-        console.log('[CLIENT DEBUG] Sending image generation payload:', JSON.stringify(imagePayload, null, 2));
-
-        const imageRes = await fetch('/api/generate-image', {
-          method: 'POST',
-          headers: requestHeaders,
-          body: JSON.stringify(imagePayload),
-        });
-
-        const imageRawText = await imageRes.text();
-        console.log('[CLIENT DEBUG] Raw response from /api/generate-image (text length):', imageRawText.length);
-
-        let imageData;
-        try {
-          imageData = JSON.parse(imageRawText);
-        } catch (parseErr: any) {
-          console.error('[CLIENT ERROR] Failed to parse image generation response as JSON:', parseErr, 'Raw response text snippet:', imageRawText.substring(0, 500));
-          throw new Error(`Failed to parse image generation response from server (Status ${imageRes.status}). ${parseErr.message || ''}`);
-        }
-
-        if (!imageRes.ok) {
-          throw new Error(imageData.error || `Server error during image generation (Status ${imageRes.status}).`);
-        }
-
-        generatedImageUrl = imageData.imageUrl;
-
-      } catch (serverError: any) {
-        console.warn('[CLIENT WARNING] Server image generation failed or returned error. Checking direct client fallback...', serverError);
-
-        if (apiKeys?.gemini) {
-          console.log('[CLIENT DEBUG] Fallback: Generating image directly from browser with client Gemini API key...');
-          try {
-            generatedImageUrl = await clientGenerateImage(finalPrompt, apiKeys.gemini);
-          } catch (clientErr: any) {
-            console.error('[CLIENT ERROR] Direct client image generation failed as well:', clientErr);
-            throw new Error(`Image generation failed: Server error (${serverError.message}) AND Direct Client Fallback error (${clientErr.message})`);
-          }
-        } else {
-          if (serverError.message.includes('Status 405') || serverError.message.includes('Method Not Allowed') || serverError.message.includes('405')) {
-            throw new Error(`Visualization Pipeline Error: Cloudflare/static environment detected (Method Not Allowed 405).\n\nTo run the applet on this custom hosting domain, please configure your own Gemini API Key in the top-right 'API Keys' modal!`);
-          }
-          throw serverError;
-        }
-      }
-
-      // Save to IndexedDB cache with unique timestamped key
-      const now = Date.now();
-      const cacheKey = generateCacheKey(fileHash, currentPage, finalExtractedWindow, selectedStyle, now);
-      const cacheEntry: CacheEntry = {
-        key: cacheKey,
+      // Create new generation task and push to queue
+      const taskId = `${fileHash}_p${page}_s${hashString(style)}_${Date.now()}`;
+      const newTask: GenerationTask = {
+        id: taskId,
         bookHash: fileHash,
-        currentPage,
-        textHash,
-        sceneJson: finalSceneJson,
-        selectedStyle,
-        imageUrl: generatedImageUrl,
-        generatedAt: now
+        page,
+        style,
+        status: 'queued',
+        createdAt: Date.now(),
       };
-      await ImageCache.set(cacheEntry);
 
-      const existingCached = get().cachedImages.filter(c => c.key !== cacheKey);
-      const updatedCacheList = [...existingCached, cacheEntry];
+      set((state) => ({
+        generationQueue: [...state.generationQueue, newTask],
+        ...(state.currentPage === page ? { generationStatus: 'extracting_scene', error: null } : {})
+      }));
 
-      const pipelineDuration = Date.now() - pipelineStart;
-
-      set({
-        cachedImages: updatedCacheList,
-        activeCacheKey: cacheKey,
-        imageUrl: generatedImageUrl,
-        generationStatus: 'success',
-        generatedAt: new Date(now).toLocaleTimeString(),
-        telemetry: {
-          currentPage,
-          windowSize: countWords(finalExtractedWindow),
-          expansionAttempts,
-          contextAccepted,
-          sceneJson: finalSceneJson,
-          finalPrompt,
-          cacheHit: false,
-          generationTimeMs: pipelineDuration,
-          approxTokenUsage: telemetryTokenUsage,
-        }
-      });
-
-    } catch (err: any) {
-      console.error('Visualization pipeline failure:', err);
-      set({
-        generationStatus: 'failed',
-        error: err.message || 'An unexpected error occurred during the visual pipeline.'
-      });
+      // Trigger background queue processing
+      processQueue();
     }
-  }
-}));
+  };
+});

@@ -3,6 +3,7 @@ import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, Sh
 import JSZip from 'jszip';
 import { useAppStore } from '../lib/store';
 import { ImageCache } from '../lib/cache/imageCache';
+import { BookImagesMenu } from './BookImagesMenu';
 
 const REASSURING_MESSAGES = [
   'Skimming through adjacent pages for environmental markers...',
@@ -215,6 +216,8 @@ export default function ImagePanel() {
           <span className="text-xs font-bold text-slate-100 uppercase tracking-wider sm:hidden">
             {isFullscreen ? 'Fullscreen' : 'Canvas'}
           </span>
+          {/* Book / Leaflet menu right after title header */}
+          <BookImagesMenu />
         </div>
         
         {/* Right side controls: Downloads + Cached image switcher + Regenerate button + Fullscreen */}

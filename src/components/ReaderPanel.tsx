@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, BookOpen, Search, ArrowRight, Menu, X, Layer
 import { useAppStore } from '../lib/store';
 import ArtStyleSelector from './ArtStyleSelector';
 import SettingsMenu from './SettingsMenu';
+import { BookImagesMenu } from './BookImagesMenu';
 
 export default function ReaderPanel() {
   const currentPage = useAppStore((state) => state.currentPage);
@@ -15,6 +16,8 @@ export default function ReaderPanel() {
   const epubFontSize = useAppStore((state) => state.epubFontSize);
   const generateVisualization = useAppStore((state) => state.generateVisualization);
   const generationStatus = useAppStore((state) => state.generationStatus);
+  const generationQueue = useAppStore((state) => state.generationQueue);
+  const selectedStyle = useAppStore((state) => state.selectedStyle);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,7 +31,9 @@ export default function ReaderPanel() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const isPdf = Boolean((window as any).__CURRENT_PDF_DOC__);
 
-  const isLoading = generationStatus === 'extracting_scene' || generationStatus === 'generating_image';
+  const isCurrentPageGenerating = generationQueue.some(
+    (t) => t.page === currentPage && (t.status === 'queued' || t.status === 'extracting_scene' || t.status === 'generating_image')
+  ) || (generationStatus === 'extracting_scene' || generationStatus === 'generating_image');
 
   // Handle keyboard Escape to exit fullscreen
   useEffect(() => {
@@ -412,19 +417,23 @@ export default function ReaderPanel() {
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* 1. Generate (in background) */}
             <button
-              onClick={() => generateVisualization()}
-              disabled={isLoading}
+              id="fullscreen-generate-button"
+              onClick={() => generateVisualization(false, currentPage, selectedStyle)}
+              disabled={isCurrentPageGenerating}
               className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/30 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
-              title="Generate illustration for current scene in background"
+              title="Generate illustration for current scene in background while reading"
             >
-              {isLoading ? (
+              {isCurrentPageGenerating ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-200" />
               ) : (
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               )}
-              <span className="hidden sm:inline">{isLoading ? 'Generating...' : 'Generate (Background)'}</span>
-              <span className="sm:hidden">{isLoading ? '...' : 'Generate'}</span>
+              <span className="hidden sm:inline">{isCurrentPageGenerating ? 'Generating...' : 'Generate (Background)'}</span>
+              <span className="sm:hidden">{isCurrentPageGenerating ? '...' : 'Generate'}</span>
             </button>
+
+            {/* Book / Leaflet illustrations & queue menu */}
+            <BookImagesMenu isFullscreenReader={true} />
 
             {/* 2. Style dropdown */}
             <ArtStyleSelector className="py-1.5 text-xs" />

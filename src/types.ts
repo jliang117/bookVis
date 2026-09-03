@@ -74,6 +74,21 @@ export interface CachedImageItem {
   generatedAt: number;
 }
 
+export interface GenerationTask {
+  id: string;
+  bookHash: string;
+  page: number;
+  style: ArtStyle;
+  status: 'queued' | 'extracting_scene' | 'generating_image' | 'success' | 'failed';
+  imageUrl?: string;
+  sceneJson?: SceneJSON;
+  finalPrompt?: string;
+  error?: string;
+  createdAt: number;
+  completedAt?: number;
+  cacheKey?: string;
+}
+
 export interface AppState {
   fileHash: string | null;
   fileName: string | null;
@@ -91,6 +106,8 @@ export interface AppState {
   chapters?: ChapterInfo[];
   apiKeys: ApiKeys;
   cachedImages: CachedImageItem[];
+  allBookImages: CachedImageItem[];
+  generationQueue: GenerationTask[];
   activeCacheKey: string | null;
   showLastImageOnPageChange: boolean;
   showDeveloperTelemetry: boolean;
