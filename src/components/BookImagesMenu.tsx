@@ -61,7 +61,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
     }
   };
 
-  // Keep a periodic timer to update "newer than 1 minute" red dot live
+  // Keep a periodic timer to update "newer than 1 minute" green dot live
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(Date.now());
@@ -233,8 +233,6 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
           className={`flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
             isOpen
               ? 'bg-indigo-600/30 border-indigo-500/60 text-white shadow-md'
-              : hasNewIllustration
-              ? 'bg-red-950/25 border-red-500/40 text-red-200 hover:bg-red-900/35 hover:border-red-500/60 shadow-sm shadow-red-950/30'
               : isGenerating
               ? 'bg-indigo-950/40 border-indigo-500/40 text-indigo-200 hover:bg-indigo-900/50'
               : 'bg-[#181818] hover:bg-[#222222] border-white/10 text-slate-300 hover:text-white'
@@ -249,18 +247,14 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
         >
           <div className="relative flex items-center justify-center shrink-0">
             <BookMarked
-              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors ${
-                hasNewIllustration
-                  ? 'text-red-500 fill-red-500/30 animate-pulse'
-                  : isGenerating
-                  ? 'text-amber-400'
-                  : 'text-indigo-400'
+              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                isGenerating ? 'text-amber-400' : 'text-indigo-400'
               }`}
             />
             {hasNewIllustration ? (
               <span className="absolute -top-1 -right-1 flex h-2 w-2 pointer-events-none" title="New illustration (<1m)">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-sm shadow-red-500/50"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
               </span>
             ) : isGenerating ? (
               <span className="absolute -top-1 -right-1 flex h-2 w-2 pointer-events-none">
@@ -277,13 +271,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               <span>{activeTasks.length}</span>
             </span>
           ) : (
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium transition-colors ${
-                hasNewIllustration
-                  ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                  : 'bg-white/10 text-slate-200'
-              }`}
-            >
+            <span className="text-[10px] bg-white/10 text-slate-200 px-1.5 py-0.5 rounded-full font-mono font-medium">
               {completedCount}
             </span>
           )}
@@ -299,17 +287,11 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#161616]">
               <div className="flex items-center gap-2">
                 <div className="relative flex items-center justify-center shrink-0">
-                  <BookMarked
-                    className={`w-4 h-4 transition-colors ${
-                      hasNewIllustration
-                        ? 'text-red-500 fill-red-500/30 animate-pulse'
-                        : 'text-indigo-400'
-                    }`}
-                  />
+                  <BookMarked className="w-4 h-4 text-indigo-400" />
                   {hasNewIllustration && (
                     <span className="absolute -top-1 -right-1 flex h-1.5 w-1.5 pointer-events-none">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500 shadow-sm shadow-red-500/50"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
                     </span>
                   )}
                 </div>
@@ -454,7 +436,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
                     Generated Images ({completedCount})
                   </span>
                   <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                    <span className="inline-block w-2 h-2 rounded-full bg-red-500 shadow-sm shadow-red-500/50"></span>
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
                     <span>New (&lt;1m)</span>
                   </div>
                 </div>
@@ -485,7 +467,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
                               : 'bg-[#181818] hover:bg-[#222222] border-white/5 hover:border-white/20'
                           }`}
                         >
-                          {/* Thumbnail with optional red dot indicator */}
+                          {/* Thumbnail with optional green dot indicator */}
                           <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-black/50 border border-white/10 shrink-0">
                             <img
                               src={item.imageUrl}
@@ -499,15 +481,15 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
                               </div>
                             )}
 
-                            {/* Red dot badge if image is less than 1 minute old */}
+                            {/* Green dot badge if image is less than 1 minute old */}
                             {isNewerThanOneMinute && (
                               <div
                                 className="absolute top-1 left-1 flex items-center justify-center"
                                 title="Newly generated (less than 1 minute old)"
                               >
                                 <span className="relative flex h-2.5 w-2.5">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 border border-black/50 shadow-sm"></span>
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-black/50 shadow-sm"></span>
                                 </span>
                               </div>
                             )}
@@ -520,7 +502,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
                                 Page {item.currentPage}
                                 {isNewerThanOneMinute && (
                                   <span
-                                    className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0"
+                                    className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0"
                                     title="New (less than 1 minute old)"
                                   ></span>
                                 )}
