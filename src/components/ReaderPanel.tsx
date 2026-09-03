@@ -270,6 +270,16 @@ export default function ReaderPanel() {
     setIsChapterMenuOpen(false);
   };
 
+  // Reset scroll position when page changes so user starts reading from top
+  useEffect(() => {
+    if (textContainerRef.current) {
+      textContainerRef.current.scrollTop = 0;
+    }
+    if (stageContainerRef.current) {
+      stageContainerRef.current.scrollTop = 0;
+    }
+  }, [currentPage]);
+
   const currentText = pageTexts[currentPage - 1] || '';
 
   const renderHighlightedText = (text: string, query: string) => {
@@ -418,7 +428,7 @@ export default function ReaderPanel() {
             {/* 1. Generate (in background) */}
             <button
               id="fullscreen-generate-button"
-              onClick={() => generateVisualization(false, currentPage, selectedStyle)}
+              onClick={() => generateVisualization(true, currentPage, selectedStyle)}
               disabled={isCurrentPageGenerating}
               className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/30 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
               title="Generate illustration for current scene in background while reading"
@@ -523,89 +533,94 @@ export default function ReaderPanel() {
         </div>
       )}
 
-      {/* Reader Page Stage */}
-      <div 
-        ref={stageContainerRef} 
-        className={`flex-1 flex items-center justify-center p-3 sm:p-5 bg-[#0d0d0d] overflow-auto ${
-          isFullscreen 
-            ? 'h-[calc(100vh-130px)] max-h-none' 
-            : 'min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)]'
-        }`}
-      >
-        <div className={`w-full flex items-center justify-center gap-2 sm:gap-3.5 my-auto ${isPdf && pdfZoom > 100 ? 'max-w-none' : (isFullscreen ? 'max-w-3xl lg:max-w-4xl' : 'max-w-2xl')}`}>
-          {/* Left Carat Button */}
-          {totalPages > 1 && (
-            <button
-              onClick={handlePrevPage}
-              disabled={currentPage <= 1}
-              className="p-2 sm:p-2.5 rounded-2xl border border-white/10 bg-[#161616]/90 hover:bg-[#222222] hover:border-white/25 disabled:opacity-20 disabled:pointer-events-none text-slate-300 hover:text-white shadow-xl backdrop-blur-md transition-all active:scale-90 shrink-0 cursor-pointer"
-              title="Previous Page"
-              aria-label="Previous Page"
-            >
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300" />
-            </button>
-          )}
+      {/* Reader Page Stage Container with Statically Positioned Side Carat Buttons */}
+      <div className="relative flex-1 min-h-0 flex flex-col bg-[#0d0d0d] overflow-hidden">
+        {/* Static Left Carat Button */}
+        {totalPages > 1 && (
+          <button
+            id="reader-side-prev-button"
+            onClick={handlePrevPage}
+            disabled={currentPage <= 1}
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3 rounded-2xl border border-white/15 bg-[#161616]/95 hover:bg-[#222222] hover:border-white/30 disabled:opacity-20 disabled:pointer-events-none text-slate-300 hover:text-white shadow-2xl backdrop-blur-md transition-all active:scale-90 shrink-0 cursor-pointer"
+            title="Previous Page"
+            aria-label="Previous Page"
+          >
+            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-slate-200" />
+          </button>
+        )}
 
-          {/* Central Panel Content */}
-          <div className="flex-1 min-w-0 flex items-center justify-center">
-            {isPdf ? (
-              <div className="relative bg-[#1a1a1a] shadow-2xl rounded-lg overflow-hidden border border-white/10 my-auto">
-                <canvas ref={canvasRef} className="block shadow-2xl mx-auto max-w-none" />
-                
-                {!isRendered && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-[#111111] min-h-[360px]">
-                    <span className="text-sm font-semibold text-slate-500">Loading page canvas...</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className={`w-full ${isFullscreen ? 'max-w-2xl lg:max-w-3xl' : 'max-w-xl'} max-h-full flex flex-col bg-[#141414] border border-white/10 rounded-2xl p-5 sm:p-8 shadow-2xl my-auto`}>
-                <div className="text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-4 pb-2 border-b border-white/5 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2 truncate">
-                    <span>Scene Excerpt</span>
-                    {currentChapter && (
-                      <span className="text-slate-400 font-normal text-[11px] truncate">
-                        • {currentChapter.title}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-slate-500 font-mono text-[11px] lowercase shrink-0">
-                    {currentText.split(/\s+/).filter(Boolean).length} words
-                  </span>
+        {/* Scrollable Stage Content Viewport */}
+        <div 
+          ref={stageContainerRef} 
+          className={`flex-1 flex items-center justify-center p-3 sm:p-5 px-12 sm:px-16 bg-[#0d0d0d] overflow-auto ${
+            isFullscreen 
+              ? 'h-[calc(100vh-130px)] max-h-none' 
+              : 'min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)]'
+          }`}
+        >
+          <div className={`w-full flex items-center justify-center my-auto ${isPdf && pdfZoom > 100 ? 'max-w-none' : (isFullscreen ? 'max-w-3xl lg:max-w-4xl' : 'max-w-2xl')}`}>
+            {/* Central Panel Content */}
+            <div className="flex-1 min-w-0 flex items-center justify-center">
+              {isPdf ? (
+                <div className="relative bg-[#1a1a1a] shadow-2xl rounded-lg overflow-hidden border border-white/10 my-auto">
+                  <canvas ref={canvasRef} className="block shadow-2xl mx-auto max-w-none" />
+                  
+                  {!isRendered && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-[#111111] min-h-[360px]">
+                      <span className="text-sm font-semibold text-slate-500">Loading page canvas...</span>
+                    </div>
+                  )}
                 </div>
-                <div 
-                  ref={textContainerRef} 
-                  className={`overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent ${
-                    isFullscreen ? 'max-h-[calc(100vh-230px)]' : 'max-h-[480px] lg:max-h-[calc(100vh-320px)]'
-                  }`}
-                >
-                  <p 
-                    className="font-serif text-slate-200 leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40 transition-all duration-200"
-                    style={{ 
-                      fontSize: `${((epubFontSize || 100) / 100) * 1.125}rem`,
-                      lineHeight: 1.7
-                    }}
+              ) : (
+                <div className={`w-full ${isFullscreen ? 'max-w-2xl lg:max-w-3xl' : 'max-w-xl'} max-h-full flex flex-col bg-[#141414] border border-white/10 rounded-2xl p-5 sm:p-8 shadow-2xl my-auto`}>
+                  <div className="text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-4 pb-2 border-b border-white/5 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2 truncate">
+                      <span>Scene Excerpt</span>
+                      {currentChapter && (
+                        <span className="text-slate-400 font-normal text-[11px] truncate">
+                          • {currentChapter.title}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-slate-500 font-mono text-[11px] lowercase shrink-0">
+                      {currentText.split(/\s+/).filter(Boolean).length} words
+                    </span>
+                  </div>
+                  <div 
+                    ref={textContainerRef} 
+                    className={`overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent ${
+                      isFullscreen ? 'max-h-[calc(100vh-230px)]' : 'max-h-[480px] lg:max-h-[calc(100vh-320px)]'
+                    }`}
                   >
-                    {renderHighlightedText(currentText, debouncedQuery) || 'No text content available.'}
-                  </p>
+                    <p 
+                      className="font-serif text-slate-200 leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40 transition-all duration-200"
+                      style={{ 
+                        fontSize: `${((epubFontSize || 100) / 100) * 1.125}rem`,
+                        lineHeight: 1.7
+                      }}
+                    >
+                      {renderHighlightedText(currentText, debouncedQuery) || 'No text content available.'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-
-          {/* Right Carat Button */}
-          {totalPages > 1 && (
-            <button
-              onClick={handleNextPage}
-              disabled={currentPage >= totalPages}
-              className="p-2 sm:p-2.5 rounded-2xl border border-white/10 bg-[#161616]/90 hover:bg-[#222222] hover:border-white/25 disabled:opacity-20 disabled:pointer-events-none text-slate-300 hover:text-white shadow-xl backdrop-blur-md transition-all active:scale-90 shrink-0 cursor-pointer"
-              title="Next Page"
-              aria-label="Next Page"
-            >
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300" />
-            </button>
-          )}
         </div>
+
+        {/* Static Right Carat Button */}
+        {totalPages > 1 && (
+          <button
+            id="reader-side-next-button"
+            onClick={handleNextPage}
+            disabled={currentPage >= totalPages}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3 rounded-2xl border border-white/15 bg-[#161616]/95 hover:bg-[#222222] hover:border-white/30 disabled:opacity-20 disabled:pointer-events-none text-slate-300 hover:text-white shadow-2xl backdrop-blur-md transition-all active:scale-90 shrink-0 cursor-pointer"
+            title="Next Page"
+            aria-label="Next Page"
+          >
+            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-slate-200" />
+          </button>
+        )}
       </div>
 
       {/* Navigation Controls footer */}

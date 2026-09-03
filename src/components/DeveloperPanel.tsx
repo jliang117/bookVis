@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, Copy, Check, Info, Cpu, Clock, HardDrive, Database, Hash } from 'lucide-react';
+import { Terminal, ChevronDown, ChevronUp, Copy, Check, Info, Cpu, Clock, HardDrive, Database, Hash, Palette } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 
 export default function DeveloperPanel() {
   const telemetry = useAppStore((state) => state.telemetry);
+  const selectedStyle = useAppStore((state) => state.selectedStyle);
   const [isOpen, setIsOpen] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -36,6 +37,10 @@ export default function DeveloperPanel() {
           <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
             Developer Pipeline Telemetry & Prompt Engineering Panel
           </span>
+          <span className="ml-2 text-[11px] font-semibold text-indigo-400 bg-indigo-950/60 border border-indigo-800/40 rounded-md px-2 py-0.5 inline-flex items-center gap-1">
+            <Palette className="w-3 h-3 text-indigo-300" />
+            {selectedStyle}
+          </span>
         </div>
         {isOpen ? (
           <ChevronUp className="w-4 h-4 text-slate-500" />
@@ -48,7 +53,17 @@ export default function DeveloperPanel() {
       {isOpen && (
         <div className="p-6 space-y-6">
           {/* Key Metrics Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="p-4 rounded-xl bg-[#141414] border border-white/5 flex flex-col">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Palette className="w-3 h-3 text-indigo-400" />
+                Active Style
+              </span>
+              <span className="text-xs font-bold text-slate-200 truncate mt-1" title={selectedStyle}>
+                {selectedStyle}
+              </span>
+            </div>
+
             <div className="p-4 rounded-xl bg-[#141414] border border-white/5 flex flex-col">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <Hash className="w-3 h-3 text-indigo-400" />

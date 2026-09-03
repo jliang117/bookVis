@@ -35,73 +35,75 @@ function getAiClient(clientApiKey?: string): GoogleGenAI {
   });
 }
 
-// Structured response schema for scene extraction matching the user request
-const sceneExtractionSchema = {
-  type: Type.OBJECT,
-  properties: {
-    enoughContext: {
-      type: Type.BOOLEAN,
-      description: 'True if there is sufficient descriptive, narrative, or environmental detail in the text to create a vivid visual scene. False if the text is too brief, highly abstract, purely conversational, or lacks any concrete visual/environmental markers to anchor an illustration.'
-    },
-    scene: {
-      type: Type.OBJECT,
-      properties: {
-        location: {
-          type: Type.STRING,
-          description: 'Where does this scene take place? (e.g. Victorian library, damp forest, high-tech control room)'
-        },
-        time: {
-          type: Type.STRING,
-          description: 'What time of day or time period is it? (e.g. sunset, late night, medieval era, dawn)'
-        },
-        lighting: {
-          type: Type.STRING,
-          description: 'How is the scene illuminated? (e.g. warm candlelight, harsh fluorescent light, shafts of golden sunlight)'
-        },
-        weather: {
-          type: Type.STRING,
-          description: 'What is the weather outside or ambient conditions? (e.g. heavy rain, dense fog, clear starry night)'
-        },
-        mood: {
-          type: Type.STRING,
-          description: 'What mood or emotional tone should the illustration convey? (e.g. tense anticipation, cozy serenity, melancholic isolation, grand wonder)'
-        },
-        characters: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "List of characters present, including descriptions of their appearance, clothing, and posture if mentioned (e.g., ['Elizabeth: mid-20s, dark coat, tense posture', 'An old librarian: silver hair, dusty suit'])"
-        },
-        importantObjects: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "Objects that are central to the action or setting (e.g., ['A half-opened wooden box with a glowing gemstone', 'Dusty leather-bound grimoire'])"
-        },
-        action: {
-          type: Type.STRING,
-          description: 'What specific action or event is occurring in this moment? (e.g., Elizabeth is sliding a secret shelf aside)'
-        },
-        visualDetails: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "Specific textural, color-related, or background visual details (e.g., ['Motes of dust dancing in light shafts', 'Flaking gold leaf on book spines'])"
-        },
-        cameraFocus: {
-          type: Type.STRING,
-          description: 'What should be the main focal point or composition style? (e.g. Close-up on the wooden box, medium shot of Elizabeth with the bookshelves)'
-        },
-        styleNotes: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "Additional notes about the physical environment or composition structure (e.g. ['high ceilinged room', 'shadowy corners'])"
-        }
+// Function to generate structured response schema for scene extraction matching the selected art style
+function getSceneExtractionSchema(style?: string) {
+  return {
+    type: Type.OBJECT,
+    properties: {
+      enoughContext: {
+        type: Type.BOOLEAN,
+        description: 'True if there is sufficient descriptive, narrative, or environmental detail in the text to create a vivid visual scene. False if the text is too brief, highly abstract, purely conversational, or lacks any concrete visual/environmental markers to anchor an illustration.'
       },
-      required: [
-        'location', 'time', 'lighting', 'weather', 'mood', 'characters', 'importantObjects', 'action', 'visualDetails', 'cameraFocus', 'styleNotes'
-      ]
-    }
-  },
-  required: ['enoughContext']
-};
+      scene: {
+        type: Type.OBJECT,
+        properties: {
+          location: {
+            type: Type.STRING,
+            description: 'Where does this scene take place? (e.g. Victorian library, damp forest, high-tech control room)'
+          },
+          time: {
+            type: Type.STRING,
+            description: 'What time of day or time period is it? (e.g. sunset, late night, medieval era, dawn)'
+          },
+          lighting: {
+            type: Type.STRING,
+            description: 'How is the scene illuminated? (e.g. warm candlelight, harsh fluorescent light, shafts of golden sunlight)'
+          },
+          weather: {
+            type: Type.STRING,
+            description: 'What is the weather outside or ambient conditions? (e.g. heavy rain, dense fog, clear starry night)'
+          },
+          mood: {
+            type: Type.STRING,
+            description: 'What mood or emotional tone should the illustration convey? (e.g. tense anticipation, cozy serenity, melancholic isolation, grand wonder)'
+          },
+          characters: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "List of characters present, including descriptions of their appearance, clothing, and posture if mentioned (e.g., ['Elizabeth: mid-20s, dark coat, tense posture', 'An old librarian: silver hair, dusty suit'])"
+          },
+          importantObjects: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "Objects that are central to the action or setting (e.g., ['A half-opened wooden box with a glowing gemstone', 'Dusty leather-bound grimoire'])"
+          },
+          action: {
+            type: Type.STRING,
+            description: 'What specific action or event is occurring in this moment? (e.g., Elizabeth is sliding a secret shelf aside)'
+          },
+          visualDetails: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "Specific textural, color-related, or background visual details (e.g., ['Motes of dust dancing in light shafts', 'Flaking gold leaf on book spines'])"
+          },
+          cameraFocus: {
+            type: Type.STRING,
+            description: 'What should be the main focal point or camera composition? (e.g. Close-up on the wooden box, medium shot of Elizabeth with the bookshelves)'
+          },
+          styleNotes: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: `Artistic and stylistic rendering notes specifically matching and complementing the ${style ? `"${style}"` : 'selected'} art style (e.g. color harmony, aesthetic treatment, and visual mood tailored for this medium). Must strictly avoid contradictory styles or mediums.`
+          }
+        },
+        required: [
+          'location', 'time', 'lighting', 'weather', 'mood', 'characters', 'importantObjects', 'action', 'visualDetails', 'cameraFocus', 'styleNotes'
+        ]
+      }
+    },
+    required: ['enoughContext']
+  };
+}
 
 // --- API ROUTES ---
 
@@ -114,12 +116,13 @@ app.get('/api/health', (req, res) => {
 
 /**
  * Scene Extraction Endpoint
- * Takes book text snippet and extracts structured visual details using Gemini
+ * Takes book text snippet and target art style, and extracts structured visual details matching the style using Gemini
  */
 app.post('/api/extract-scene', async (req, res) => {
-  const { text } = req.body;
+  const { text, style } = req.body;
+  const targetStyle = (style && typeof style === 'string' && style.trim().length > 0) ? style.trim() : 'Dark & Epic Fantasy';
 
-  console.log('[SERVER DEBUG] Received /api/extract-scene request. Text snippet length:', text?.length || 0);
+  console.log(`[SERVER DEBUG] Received /api/extract-scene request for style "${targetStyle}". Text snippet length:`, text?.length || 0);
 
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     return res.status(400).json({ error: 'Text content is required for scene extraction.' });
@@ -131,18 +134,24 @@ app.post('/api/extract-scene', async (req, res) => {
     const clientApiKey = req.headers['x-gemini-api-key'] as string | undefined;
     const ai = getAiClient(clientApiKey);
     
-    console.log('[SERVER DEBUG] Querying Gemini model: gemini-3.5-flash-lite for scene extraction...');
+    console.log(`[SERVER DEBUG] Querying Gemini model: gemini-3.5-flash-lite for scene extraction with target style "${targetStyle}"...`);
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash-lite',
-      contents: `Please analyze this book excerpt and extract visual descriptors for scene rendering:\n\n"""\n${text}\n"""`,
+      contents: `Please analyze this book excerpt and extract visual descriptors for scene rendering in the "${targetStyle}" art style:\n\n"""\n${text}\n"""`,
       config: {
-        systemInstruction: `You are an expert literary scene visualizer. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 
+        systemInstruction: `You are an expert literary scene visualizer and art director. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 
+
+CRITICAL ART STYLE ALIGNMENT:
+The user has selected the "${targetStyle}" art style for this illustration.
+All visual scene elements, lighting, composition, and especially the "styleNotes" field MUST strictly match and harmonize with the "${targetStyle}" aesthetic.
+- In "styleNotes", provide specific artistic rendering notes, color palette harmonies, and texture details that directly enhance and complement the "${targetStyle}" art style.
+- Do NOT output style notes that contradict or clash with "${targetStyle}" (e.g. if the style is Anime & Ghibli, Watercolor, or Pixel Art, never suggest photorealism or 3D render; if the style is Pixel Art, do not specify smooth brushwork).
 
 You must strictly evaluate if there is "enoughContext" (e.g. setting description, physical environment, character action, or visual markers). Set "enoughContext" to true ONLY if there is sufficient descriptive detail to create a vivid visual scene. If the text is too brief, highly abstract, purely conversational, or lacks any concrete visual/environmental markers to anchor an illustration, set "enoughContext" to false.
 
 Be extremely descriptive in your visual details, clothing description, posture, and environmental atmosphere. Do not assume or hallucinate features not hinted at in the text. Ensure output is in strict JSON conforming to the schema.`,
         responseMimeType: 'application/json',
-        responseSchema: sceneExtractionSchema,
+        responseSchema: getSceneExtractionSchema(targetStyle),
       }
     });
 

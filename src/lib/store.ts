@@ -79,15 +79,16 @@ const getInitialSettings = () => {
 };
 
 // Helper function to extract scene directly from browser using Gemini API
-async function clientExtractScene(text: string, apiKey: string): Promise<SceneJSON> {
+async function clientExtractScene(text: string, style: ArtStyle, apiKey: string): Promise<SceneJSON> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
-  
+  const targetStyle = style || 'Dark & Epic Fantasy';
+
   const payload = {
     contents: [
       {
         parts: [
           {
-            text: `Please analyze this book excerpt and extract visual descriptors for scene rendering:\n\n"""\n${text}\n"""`
+            text: `Please analyze this book excerpt and extract visual descriptors for scene rendering in the "${targetStyle}" art style:\n\n"""\n${text}\n"""`
           }
         ]
       }
@@ -95,7 +96,13 @@ async function clientExtractScene(text: string, apiKey: string): Promise<SceneJS
     systemInstruction: {
       parts: [
         {
-          text: `You are an expert literary scene visualizer. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 
+          text: `You are an expert literary scene visualizer and art director. Your task is to analyze a book excerpt and extract the detailed visual elements needed to generate a high-fidelity, accurate illustration of the current scene. 
+
+CRITICAL ART STYLE ALIGNMENT:
+The user has selected the "${targetStyle}" art style for this illustration.
+All visual scene elements, lighting, composition, and especially the "styleNotes" field MUST strictly match and harmonize with the "${targetStyle}" aesthetic.
+- In "styleNotes", provide specific artistic rendering notes, color palette harmonies, and texture details that directly enhance and complement the "${targetStyle}" art style.
+- Do NOT output style notes that contradict or clash with "${targetStyle}" (e.g. if the style is Anime & Ghibli, Watercolor, or Pixel Art, never suggest photorealism or 3D render; if the style is Pixel Art, do not specify smooth brushwork).
 
 You must strictly evaluate if there is "enoughContext" (e.g. setting description, physical environment, character action, or visual markers). Set "enoughContext" to true ONLY if there is sufficient descriptive detail to create a vivid visual scene. If the text is too brief, highly abstract, purely conversational, or lacks any concrete visual/environmental markers to anchor an illustration, set "enoughContext" to false.
 
@@ -156,12 +163,12 @@ Be extremely descriptive in your visual details, clothing description, posture, 
               },
               cameraFocus: {
                 type: 'STRING',
-                description: 'What should be the main focal point or composition style? (e.g. Close-up on the wooden box, medium shot of Elizabeth with the bookshelves)'
+                description: 'What should be the main focal point or camera composition? (e.g. Close-up on the wooden box, medium shot of Elizabeth with the bookshelves)'
               },
               styleNotes: {
                 type: 'ARRAY',
                 items: { type: 'STRING' },
-                description: "Additional notes about the physical environment or composition structure (e.g. ['high ceilinged room', 'shadowy corners'])"
+                description: `Artistic and stylistic rendering notes specifically matching and complementing the "${targetStyle}" art style (e.g. color harmony, aesthetic treatment, and visual mood tailored for this medium). Must strictly avoid contradictory styles or mediums.`
               }
             },
             required: [
@@ -307,7 +314,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
             let tokensUsed = 0;
 
             try {
-              const payload = { text };
+              const payload = { text, style: taskStyle };
               const extractRes = await fetch('/api/extract-scene', {
                 method: 'POST',
                 headers: requestHeaders,
@@ -327,7 +334,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
               tokensUsed = extractData.approxTokens || 0;
             } catch (serverError: any) {
               if (apiKeys?.gemini) {
-                sceneData = await clientExtractScene(text, apiKeys.gemini);
+                sceneData = await clientExtractScene(text, taskStyle, apiKeys.gemini);
                 tokensUsed = Math.ceil(text.length / 4) + 500;
               } else {
                 throw serverError;
@@ -679,13 +686,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       if (fileHash && pageTexts.length > 0) {
         const pageEntries = await ImageCache.getForPage(fileHash, page);
         if (pageEntries.length > 0) {
-          const matching = pageEntries.find(e => e.selectedStyle === selectedStyle) || pageEntries[pageEntries.length - 1];
+          const exactMatching = pageEntries.find(e => e.selectedStyle === selectedStyle);
+          const matching = exactMatching || pageEntries[pageEntries.length - 1];
           if (!activeTask) {
             set({
               cachedImages: pageEntries,
               activeCacheKey: matching.key,
               imageUrl: matching.imageUrl,
-              selectedStyle: matching.selectedStyle as ArtStyle,
+              // Only sync selectedStyle if exact match is found; never clobber the user's selected dropdown choice
+              selectedStyle: exactMatching ? (exactMatching.selectedStyle as ArtStyle) : get().selectedStyle,
               generationStatus: 'success',
               generatedAt: new Date(matching.generatedAt).toLocaleTimeString(),
               telemetry: {
@@ -717,10 +726,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       );
 
       // Check if we already have a cached image for this style on the current page
-      const matching = cachedImages.find(e => e.selectedStyle === style);
+      const pageEntries = fileHash ? await ImageCache.getForPage(fileHash, currentPage) : cachedImages;
+      const matching = pageEntries.find(e => e.selectedStyle === style);
       if (matching) {
         set({
           selectedStyle: style,
+          cachedImages: pageEntries,
           activeCacheKey: matching.key,
           imageUrl: matching.imageUrl,
           generationStatus: 'success',
@@ -740,6 +751,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       } else {
         set({
           selectedStyle: style,
+          cachedImages: pageEntries,
           error: null,
           imageUrl: showLastImageOnPageChange ? prevImageUrl : null,
           generationStatus: activeTask

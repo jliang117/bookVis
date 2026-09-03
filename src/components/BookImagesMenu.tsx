@@ -65,7 +65,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(Date.now());
-    }, 5000); // every 5 seconds
+    }, 3000); // every 3 seconds
     return () => clearInterval(timer);
   }, []);
 
@@ -112,6 +112,11 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
 
   const completedCount = allBookImages.length;
   const isGenerating = activeTasks.length > 0;
+
+  // Check if any illustration in the book was generated in the last 60 seconds (< 1m)
+  const hasNewIllustration = allBookImages.some(
+    (item) => (currentTime - item.generatedAt) < 60000
+  );
 
   // Sorting logic based on sortField and sortOrder
   const sortedImages = [...allBookImages].sort((a, b) => {
@@ -228,24 +233,41 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
           className={`flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
             isOpen
               ? 'bg-indigo-600/30 border-indigo-500/60 text-white shadow-md'
+              : hasNewIllustration
+              ? 'bg-red-950/25 border-red-500/40 text-red-200 hover:bg-red-900/35 hover:border-red-500/60 shadow-sm shadow-red-950/30'
               : isGenerating
               ? 'bg-indigo-950/40 border-indigo-500/40 text-indigo-200 hover:bg-indigo-900/50'
               : 'bg-[#181818] hover:bg-[#222222] border-white/10 text-slate-300 hover:text-white'
           }`}
-          title={`Illustrations (${completedCount})`}
+          title={
+            hasNewIllustration
+              ? `New illustration available! (${completedCount})`
+              : `Illustrations (${completedCount})`
+          }
           aria-label="Illustrations"
           aria-expanded={isOpen}
         >
-          <div className="relative flex items-center justify-center">
+          <div className="relative flex items-center justify-center shrink-0">
             <BookMarked
-              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isGenerating ? 'text-amber-400' : 'text-indigo-400'}`}
+              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors ${
+                hasNewIllustration
+                  ? 'text-red-500 fill-red-500/30 animate-pulse'
+                  : isGenerating
+                  ? 'text-amber-400'
+                  : 'text-indigo-400'
+              }`}
             />
-            {isGenerating && (
-              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+            {hasNewIllustration ? (
+              <span className="absolute -top-1 -right-1 flex h-2 w-2 pointer-events-none" title="New illustration (<1m)">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-sm shadow-red-500/50"></span>
+              </span>
+            ) : isGenerating ? (
+              <span className="absolute -top-1 -right-1 flex h-2 w-2 pointer-events-none">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
               </span>
-            )}
+            ) : null}
           </div>
 
           {/* Number of images or processing spinner */}
@@ -255,7 +277,13 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               <span>{activeTasks.length}</span>
             </span>
           ) : (
-            <span className="text-[10px] bg-white/10 text-slate-200 px-1.5 py-0.5 rounded-full font-mono font-medium">
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium transition-colors ${
+                hasNewIllustration
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  : 'bg-white/10 text-slate-200'
+              }`}
+            >
               {completedCount}
             </span>
           )}
@@ -270,7 +298,21 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
             {/* Menu Header: Title "Illustrations Book" */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#161616]">
               <div className="flex items-center gap-2">
-                <BookMarked className="w-4 h-4 text-indigo-400" />
+                <div className="relative flex items-center justify-center shrink-0">
+                  <BookMarked
+                    className={`w-4 h-4 transition-colors ${
+                      hasNewIllustration
+                        ? 'text-red-500 fill-red-500/30 animate-pulse'
+                        : 'text-indigo-400'
+                    }`}
+                  />
+                  {hasNewIllustration && (
+                    <span className="absolute -top-1 -right-1 flex h-1.5 w-1.5 pointer-events-none">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500 shadow-sm shadow-red-500/50"></span>
+                    </span>
+                  )}
+                </div>
                 <div>
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                     Illustrations Book
