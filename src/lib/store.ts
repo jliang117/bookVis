@@ -16,6 +16,9 @@ interface AppActions {
   setShowLastImageOnPageChange: (enabled: boolean) => void;
   setShowDeveloperTelemetry: (enabled: boolean) => void;
   setWindowSize: (size: number) => void;
+  setPdfZoom: (zoom: number) => void;
+  setEpubFontSize: (size: number) => void;
+  setDocumentType: (type: 'pdf' | 'epub' | 'text' | null) => void;
 }
 
 const initialTelemetry: DeveloperTelemetry = {
@@ -46,16 +49,29 @@ const getInitialSettings = () => {
     const rawWindowSize = localStorage.getItem('visual_reader_window_size');
     const parsedWindowSize = rawWindowSize !== null ? parseInt(rawWindowSize, 10) : 0;
     const windowSize = !isNaN(parsedWindowSize) ? Math.max(0, Math.min(5, parsedWindowSize)) : 0;
+
+    const rawPdfZoom = localStorage.getItem('visual_reader_pdf_zoom');
+    const parsedPdfZoom = rawPdfZoom !== null ? parseInt(rawPdfZoom, 10) : 100;
+    const pdfZoom = !isNaN(parsedPdfZoom) ? Math.max(50, Math.min(250, parsedPdfZoom)) : 100;
+
+    const rawEpubFontSize = localStorage.getItem('visual_reader_epub_font_size');
+    const parsedEpubFontSize = rawEpubFontSize !== null ? parseInt(rawEpubFontSize, 10) : 100;
+    const epubFontSize = !isNaN(parsedEpubFontSize) ? Math.max(50, Math.min(250, parsedEpubFontSize)) : 100;
+
     return {
       showLastImageOnPageChange: showLast === 'true', // default false
       showDeveloperTelemetry: showTelemetry === 'true', // default false
       windowSize, // default 0, limit 0 to 5
+      pdfZoom, // default 100%
+      epubFontSize, // default 100%
     };
   } catch {
     return {
       showLastImageOnPageChange: false,
       showDeveloperTelemetry: false,
       windowSize: 0,
+      pdfZoom: 100,
+      epubFontSize: 100,
     };
   }
 };
@@ -253,11 +269,38 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   showLastImageOnPageChange: getInitialSettings().showLastImageOnPageChange,
   showDeveloperTelemetry: getInitialSettings().showDeveloperTelemetry,
   windowSize: getInitialSettings().windowSize,
+  pdfZoom: getInitialSettings().pdfZoom,
+  epubFontSize: getInitialSettings().epubFontSize,
+  documentType: null,
 
   // Private states not exposed directly in AppState
   pageTexts: [] as string[],
 
   // Actions
+  setPdfZoom: (zoom) => {
+    const clamped = Math.max(50, Math.min(250, Math.round(zoom)));
+    try {
+      localStorage.setItem('visual_reader_pdf_zoom', String(clamped));
+    } catch (e) {
+      console.error(e);
+    }
+    set({ pdfZoom: clamped });
+  },
+
+  setEpubFontSize: (size) => {
+    const clamped = Math.max(50, Math.min(250, Math.round(size)));
+    try {
+      localStorage.setItem('visual_reader_epub_font_size', String(clamped));
+    } catch (e) {
+      console.error(e);
+    }
+    set({ epubFontSize: clamped });
+  },
+
+  setDocumentType: (type) => {
+    set({ documentType: type });
+  },
+
   setWindowSize: (size) => {
     const clamped = Math.max(0, Math.min(5, Math.floor(size) || 0));
     try {
@@ -296,10 +339,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   setPageTexts: async (texts, fileName, fileHash, chapters = []) => {
+    const isPdf = Boolean((window as any).__CURRENT_PDF_DOC__) || (fileName ? fileName.toLowerCase().endsWith('.pdf') : false);
+    const isEpub = fileName ? fileName.toLowerCase().endsWith('.epub') : false;
+    const documentType = isPdf ? 'pdf' : (isEpub ? 'epub' : 'text');
+
     set({
       pageTexts: texts,
       fileName,
       fileHash,
+      documentType,
       chapters: chapters || [],
       currentPage: 1,
       totalPages: texts.length,
@@ -455,9 +503,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   resetStore: () => {
+    (window as any).__CURRENT_PDF_DOC__ = null;
     set({
       fileHash: null,
       fileName: null,
+      documentType: null,
       currentPage: 1,
       totalPages: 0,
       extractedWindow: '',

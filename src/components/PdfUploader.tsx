@@ -14,6 +14,7 @@ const SAMPLE_EXCERPT = `The ancient library was carved directly into the petrifi
 
 export default function PdfUploader() {
   const setPageTexts = useAppStore((state) => state.setPageTexts);
+  const setDocumentType = useAppStore((state) => state.setDocumentType);
   const generateVisualization = useAppStore((state) => state.generateVisualization);
   const [mode, setMode] = useState<'file' | 'text'>('file');
   const [directText, setDirectText] = useState('');
@@ -64,6 +65,7 @@ export default function PdfUploader() {
         // Keep reference to PDF document in window for canvas-based page rendering
         (window as any).__CURRENT_PDF_DOC__ = pdf;
 
+        setDocumentType('pdf');
         // Store in global state (which automatically kicks off page 1 generation)
         setPageTexts(extractedPageTexts, file.name, bookHash);
 
@@ -77,6 +79,7 @@ export default function PdfUploader() {
         setTotalPages(pages.length);
         setParsingProgress(pages.length);
 
+        setDocumentType('epub');
         // Store in global state with structured chapters
         setPageTexts(pages, title, bookHash, chapters);
       }

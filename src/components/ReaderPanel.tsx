@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, BookOpen, Search, ArrowRight, Menu, X, Layers, Check, Bookmark } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Search, ArrowRight, Menu, X, Layers, Check, Bookmark, Maximize2, Minimize2, Sparkles, RefreshCw } from 'lucide-react';
 import { useAppStore } from '../lib/store';
+import ArtStyleSelector from './ArtStyleSelector';
+import SettingsMenu from './SettingsMenu';
 
 export default function ReaderPanel() {
   const currentPage = useAppStore((state) => state.currentPage);
@@ -9,6 +11,10 @@ export default function ReaderPanel() {
   const pageTexts = useAppStore((state) => state.pageTexts);
   const chapters = useAppStore((state) => state.chapters) || [];
   const setCurrentPage = useAppStore((state) => state.setCurrentPage);
+  const pdfZoom = useAppStore((state) => state.pdfZoom);
+  const epubFontSize = useAppStore((state) => state.epubFontSize);
+  const generateVisualization = useAppStore((state) => state.generateVisualization);
+  const generationStatus = useAppStore((state) => state.generationStatus);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,7 +25,50 @@ export default function ReaderPanel() {
   const [jumpPage, setJumpPage] = useState<string>('');
   const [isRendered, setIsRendered] = useState(false);
   const [isChapterMenuOpen, setIsChapterMenuOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const isPdf = Boolean((window as any).__CURRENT_PDF_DOC__);
+
+  const isLoading = generationStatus === 'extracting_scene' || generationStatus === 'generating_image';
+
+  // Handle keyboard Escape to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
+  // Sync state if user exits browser native fullscreen
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, [isFullscreen]);
+
+  const toggleFullscreen = () => {
+    if (!isFullscreen) {
+      setIsFullscreen(true);
+      try {
+        if (containerRef.current && !document.fullscreenElement) {
+          containerRef.current.requestFullscreen?.().catch(() => {});
+        }
+      } catch {}
+    } else {
+      setIsFullscreen(false);
+      try {
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {});
+        }
+      } catch {}
+    }
+  };
 
   // Text Search State with 500ms debounce
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,9 +180,11 @@ export default function ReaderPanel() {
       const context = canvas.getContext('2d');
       if (!context) return;
 
-      // Determine correct responsive scaling based on container element width
-      const containerWidth = containerRef.current?.clientWidth || 550;
-      const desiredWidth = Math.min(650, containerWidth - 24); // Cap width to keep it beautiful
+      // Determine correct responsive scaling based on container element width and persistent zoom
+      const zoomFactor = (pdfZoom || 100) / 100;
+      const containerWidth = containerRef.current?.clientWidth || (isFullscreen ? 950 : 550);
+      const baseDesiredWidth = Math.min(isFullscreen ? 950 : 650, containerWidth - 24); // Cap width to keep it beautiful
+      const desiredWidth = Math.round(baseDesiredWidth * zoomFactor);
       const tempViewport = page.getViewport({ scale: 1.0 });
       const computedScale = desiredWidth / tempViewport.width;
 
@@ -166,7 +217,7 @@ export default function ReaderPanel() {
     }
   };
 
-  // Render page when page number or window size changes
+  // Render page when page number, pdfZoom, or window size changes
   useEffect(() => {
     if (isPdf) {
       renderPage(currentPage);
@@ -186,7 +237,7 @@ export default function ReaderPanel() {
         activeRenderTaskRef.current.cancel();
       }
     };
-  }, [currentPage, isPdf]);
+  }, [currentPage, isPdf, pdfZoom, isFullscreen]);
 
   const handlePrevPage = () => {
     if (currentPage > 1) {
@@ -240,10 +291,19 @@ export default function ReaderPanel() {
   };
 
   return (
-    <div className="relative flex flex-col h-full bg-[#111111] border border-white/10 rounded-2xl shadow-lg overflow-hidden" ref={containerRef}>
+    <div 
+      ref={containerRef}
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-[#0a0a0a] w-screen h-screen overflow-hidden"
+          : "relative flex flex-col h-full bg-[#111111] border border-white/10 rounded-2xl shadow-lg overflow-hidden"
+      }
+    >
       {/* Header Panel */}
-      <div className="relative flex items-center justify-between px-3.5 sm:px-5 py-2.5 sm:py-3 border-b border-white/5 bg-[#141414] z-20 gap-2">
-        <div className="flex items-center gap-2 max-w-[50%] sm:max-w-[55%]">
+      <div className={`relative flex items-center justify-between border-b border-white/10 bg-[#141414] z-20 gap-2 sm:gap-3 ${
+        isFullscreen ? 'px-4 sm:px-6 py-2.5 sm:py-3 shadow-md' : 'px-3.5 sm:px-5 py-2.5 sm:py-3 border-white/5'
+      }`}>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {/* Hamburger Chapter Drawer Toggle */}
           {chapters.length > 0 && (
             <button
@@ -261,17 +321,20 @@ export default function ReaderPanel() {
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 truncate">
-            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 shrink-0" />
-            <span className="text-xs font-semibold text-slate-300 truncate" title={fileName || ''}>
+          <div className="flex items-center gap-1.5 truncate max-w-[140px] sm:max-w-[200px] md:max-w-xs">
+            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-slate-200 truncate" title={fileName || ''}>
               {fileName || 'Reading Material'}
             </span>
+            {isFullscreen && (
+              <span className="hidden xl:inline text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider shrink-0">
+                Fullscreen
+              </span>
+            )}
           </div>
-        </div>
 
-        {/* Debounced Simple Text Search */}
-        <div className="flex items-center gap-1.5 shrink-0 max-w-[50%] sm:max-w-[45%]">
-          <div className="relative flex items-center w-full min-w-[130px] sm:min-w-[170px] max-w-[240px]">
+          {/* Debounced Simple Text Search */}
+          <div className="relative flex items-center w-full min-w-[110px] sm:min-w-[160px] max-w-[200px] ml-1">
             <Search
               className={`absolute left-2.5 w-3.5 h-3.5 pointer-events-none transition-colors ${
                 isSearching ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
@@ -279,7 +342,7 @@ export default function ReaderPanel() {
             />
             <input
               type="text"
-              placeholder="Search text..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-7 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
@@ -301,13 +364,13 @@ export default function ReaderPanel() {
 
           {/* Search Result Counter & Prev/Next Match Stepper */}
           {debouncedQuery && (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="hidden sm:flex items-center gap-1 shrink-0">
               {searchResults.length > 0 ? (
                 <div className="flex items-center gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-2 py-1 text-[11px] font-mono text-slate-300">
                   <span className="text-indigo-300 font-semibold">
                     {currentMatchIndex + 1}/{searchResults.length}
                   </span>
-                  <span className="text-slate-500 text-[10px] hidden sm:inline">pages</span>
+                  <span className="text-slate-500 text-[10px] hidden md:inline">pages</span>
 
                   {searchResults.length > 1 && (
                     <div className="flex items-center gap-0.5 ml-1 border-l border-white/10 pl-1">
@@ -334,7 +397,7 @@ export default function ReaderPanel() {
                 </div>
               ) : (
                 !isSearching && (
-                  <span className="text-[10px] sm:text-[11px] text-rose-300 bg-rose-950/40 border border-rose-500/20 px-2 py-1 rounded-xl shrink-0 font-medium">
+                  <span className="text-[10px] text-rose-300 bg-rose-950/40 border border-rose-500/20 px-2 py-1 rounded-xl shrink-0 font-medium">
                     No matches
                   </span>
                 )
@@ -342,6 +405,57 @@ export default function ReaderPanel() {
             </div>
           )}
         </div>
+
+        {/* Right side controls */}
+        {isFullscreen ? (
+          /* Within fullscreen reader panel: 4 menu options (generate in background, style dropdown, settings, exit) */
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* 1. Generate (in background) */}
+            <button
+              onClick={() => generateVisualization()}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/30 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
+              title="Generate illustration for current scene in background"
+            >
+              {isLoading ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-200" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              )}
+              <span className="hidden sm:inline">{isLoading ? 'Generating...' : 'Generate (Background)'}</span>
+              <span className="sm:hidden">{isLoading ? '...' : 'Generate'}</span>
+            </button>
+
+            {/* 2. Style dropdown */}
+            <ArtStyleSelector className="py-1.5 text-xs" />
+
+            {/* 3. Settings */}
+            <SettingsMenu className="py-1.5" />
+
+            {/* 4. Exit */}
+            <button
+              onClick={toggleFullscreen}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#242424] text-slate-200 hover:text-white border border-white/15 hover:border-white/30 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer shrink-0 shadow-sm"
+              title="Exit Fullscreen (Esc)"
+              aria-label="Exit Fullscreen"
+            >
+              <Minimize2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Exit</span>
+            </button>
+          </div>
+        ) : (
+          /* Normal mode: Fullscreen trigger button */
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={toggleFullscreen}
+              className="p-1.5 sm:px-2 sm:py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#1a1a1a] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer flex items-center justify-center shrink-0"
+              title="Fullscreen Reader"
+              aria-label="Fullscreen Reader"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Chapters Overlay Drawer / Popover */}
@@ -401,8 +515,15 @@ export default function ReaderPanel() {
       )}
 
       {/* Reader Page Stage */}
-      <div ref={stageContainerRef} className="flex-1 flex items-center justify-center p-3 sm:p-5 bg-[#0d0d0d] overflow-y-auto min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)]">
-        <div className="w-full flex items-center justify-center gap-2 sm:gap-3.5 my-auto max-w-2xl">
+      <div 
+        ref={stageContainerRef} 
+        className={`flex-1 flex items-center justify-center p-3 sm:p-5 bg-[#0d0d0d] overflow-auto ${
+          isFullscreen 
+            ? 'h-[calc(100vh-130px)] max-h-none' 
+            : 'min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)]'
+        }`}
+      >
+        <div className={`w-full flex items-center justify-center gap-2 sm:gap-3.5 my-auto ${isPdf && pdfZoom > 100 ? 'max-w-none' : (isFullscreen ? 'max-w-3xl lg:max-w-4xl' : 'max-w-2xl')}`}>
           {/* Left Carat Button */}
           {totalPages > 1 && (
             <button
@@ -419,17 +540,17 @@ export default function ReaderPanel() {
           {/* Central Panel Content */}
           <div className="flex-1 min-w-0 flex items-center justify-center">
             {isPdf ? (
-              <div className="relative bg-[#1a1a1a] shadow-2xl rounded-lg overflow-hidden border border-white/10 max-w-full my-auto">
-                <canvas ref={canvasRef} className="max-w-full h-auto block" />
+              <div className="relative bg-[#1a1a1a] shadow-2xl rounded-lg overflow-hidden border border-white/10 my-auto">
+                <canvas ref={canvasRef} className="block shadow-2xl mx-auto max-w-none" />
                 
                 {!isRendered && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-[#111111]">
+                  <div className="absolute inset-0 flex items-center justify-center bg-[#111111] min-h-[360px]">
                     <span className="text-sm font-semibold text-slate-500">Loading page canvas...</span>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="w-full max-w-xl max-h-full flex flex-col bg-[#141414] border border-white/10 rounded-2xl p-5 sm:p-8 shadow-2xl my-auto">
+              <div className={`w-full ${isFullscreen ? 'max-w-2xl lg:max-w-3xl' : 'max-w-xl'} max-h-full flex flex-col bg-[#141414] border border-white/10 rounded-2xl p-5 sm:p-8 shadow-2xl my-auto`}>
                 <div className="text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-4 pb-2 border-b border-white/5 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2 truncate">
                     <span>Scene Excerpt</span>
@@ -443,8 +564,19 @@ export default function ReaderPanel() {
                     {currentText.split(/\s+/).filter(Boolean).length} words
                   </span>
                 </div>
-                <div ref={textContainerRef} className="overflow-y-auto pr-2 max-h-[480px] lg:max-h-[calc(100vh-320px)] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                  <p className="font-serif text-slate-200 text-base md:text-lg leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40">
+                <div 
+                  ref={textContainerRef} 
+                  className={`overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent ${
+                    isFullscreen ? 'max-h-[calc(100vh-230px)]' : 'max-h-[480px] lg:max-h-[calc(100vh-320px)]'
+                  }`}
+                >
+                  <p 
+                    className="font-serif text-slate-200 leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40 transition-all duration-200"
+                    style={{ 
+                      fontSize: `${((epubFontSize || 100) / 100) * 1.125}rem`,
+                      lineHeight: 1.7
+                    }}
+                  >
                     {renderHighlightedText(currentText, debouncedQuery) || 'No text content available.'}
                   </p>
                 </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, ShieldCheck, Menu, Check, Download, FolderDown, Maximize2, Minimize2 } from 'lucide-react';
+import { RefreshCw, Sparkles, Image as ImageIcon, AlertCircle, Eye, Calendar, ShieldCheck, Menu, Check, Download, FolderDown, Maximize2, Minimize2, ChevronDown } from 'lucide-react';
 import JSZip from 'jszip';
 import { useAppStore } from '../lib/store';
 import { ImageCache } from '../lib/cache/imageCache';
@@ -30,9 +30,11 @@ export default function ImagePanel() {
   
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const [isZipping, setIsZipping] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Handle keyboard Escape to exit fullscreen
@@ -87,6 +89,19 @@ export default function ImagePanel() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen]);
+
+  // Close download dropdown menu on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setIsDownloadMenuOpen(false);
+      }
+    }
+    if (isDownloadMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDownloadMenuOpen]);
 
   // Rotate reassuring loading messages during generation
   useEffect(() => {
@@ -204,37 +219,88 @@ export default function ImagePanel() {
         
         {/* Right side controls: Downloads + Cached image switcher + Regenerate button + Fullscreen */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Download Current Image Button */}
-          {imageUrl && (
-            <button
-              onClick={handleDownloadCurrent}
-              disabled={isLoading || isZipping}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-              title={`Download active illustration (Page ${currentPage})`}
-              aria-label="Download current illustration"
-            >
-              <Download className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden md:inline">Download</span>
-            </button>
-          )}
-
-          {/* Download All (All Generated Pages) Button */}
+          {/* Condensed Download Dropdown Menu */}
           {(imageUrl || cachedImages.length > 0) && (
-            <button
-              onClick={handleDownloadAll}
-              disabled={isLoading || isZipping}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-              title="Download all generated scenes across all pages as a ZIP archive"
-              aria-label="Download all illustrations"
-            >
-              {isZipping ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-              ) : (
-                <FolderDown className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="relative" ref={downloadMenuRef}>
+              <button
+                onClick={() => setIsDownloadMenuOpen((prev) => !prev)}
+                disabled={isLoading || isZipping}
+                className={`flex items-center justify-center p-1.5 sm:px-2 sm:py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none ${
+                  isDownloadMenuOpen
+                    ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200 shadow-md'
+                    : 'bg-[#161616] hover:bg-[#222222] border-white/10 text-slate-300 hover:text-white'
+                }`}
+                title="Download options (Current page or All pages)"
+                aria-label="Download options"
+              >
+                {isZipping ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                ) : (
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+                <ChevronDown className={`w-3 h-3 text-slate-400 ml-0.5 transition-transform duration-200 ${isDownloadMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Download Dropdown Popover */}
+              {isDownloadMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-[#161616] border border-white/15 rounded-xl shadow-2xl p-1.5 z-50 backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-2.5 py-1.5 border-b border-white/10 mb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Download Options
+                    </span>
+                    {isZipping && (
+                      <span className="text-[10px] text-indigo-400 font-mono animate-pulse">
+                        Zipping...
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Option 1: Download Current Page */}
+                  <button
+                    onClick={() => {
+                      setIsDownloadMenuOpen(false);
+                      handleDownloadCurrent();
+                    }}
+                    disabled={!imageUrl || isZipping}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="font-semibold text-slate-100 truncate">
+                        Download current page
+                      </span>
+                      <span className="text-[10px] text-slate-400 truncate">
+                        Page {currentPage} • {selectedStyle}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Download All Pages (ZIP) */}
+                  <button
+                    onClick={() => {
+                      setIsDownloadMenuOpen(false);
+                      handleDownloadAll();
+                    }}
+                    disabled={isZipping}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {isZipping ? (
+                      <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
+                    ) : (
+                      <FolderDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                    )}
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="font-semibold text-slate-100 truncate">
+                        Download all pages (ZIP)
+                      </span>
+                      <span className="text-[10px] text-slate-400 truncate">
+                        Archive of all generated illustrations
+                      </span>
+                    </div>
+                  </button>
+                </div>
               )}
-              <span className="hidden md:inline">{isZipping ? 'Zipping...' : 'Download All'}</span>
-              <span className="md:hidden text-[11px]">{isZipping ? '...' : 'All'}</span>
-            </button>
+            </div>
           )}
 
           {cachedImages.length > 0 && (
@@ -369,7 +435,7 @@ export default function ImagePanel() {
           {/* Fullscreen Toggle Button */}
           <button
             onClick={toggleFullscreen}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer"
+            className="flex items-center justify-center p-1.5 sm:px-2 sm:py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#161616] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer shrink-0"
             title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen"}
             aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           >
@@ -378,7 +444,6 @@ export default function ImagePanel() {
             ) : (
               <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
             )}
-            <span className="hidden md:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
           </button>
         </div>
       </div>

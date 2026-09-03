@@ -95,4 +95,7 @@ export interface AppState {
   showLastImageOnPageChange: boolean;
   showDeveloperTelemetry: boolean;
   windowSize: number;
+  pdfZoom: number;
+  epubFontSize: number;
+  documentType: 'pdf' | 'epub' | 'text' | null;
 }
