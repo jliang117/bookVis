@@ -620,7 +620,7 @@ export default function ReaderPanel() {
         {isFullscreen && (
           <div
             id="mobile-fullscreen-bottom-dock"
-            className="lg:hidden fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 bg-[#141414]/95 border border-white/15 rounded-2xl shadow-2xl backdrop-blur-xl max-w-[calc(100vw-1.5rem)]"
+            className="lg:hidden fixed bottom-3 sm:bottom-4 left-0 right-0 mx-auto w-fit z-30 flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 bg-[#141414]/95 border border-white/15 rounded-2xl shadow-2xl backdrop-blur-xl max-w-[calc(100vw-1.5rem)]"
           >
             {/* Generate Scene Action */}
             <button

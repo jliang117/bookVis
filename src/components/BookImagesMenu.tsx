@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BookMarked,
   Loader2,
@@ -75,6 +76,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       if (fullscreenModalImage) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest?.('#fullscreen-illustration-modal')) return;
+      if (target?.closest?.('#book-images-popover')) return;
 
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsOpen(false);
@@ -278,7 +280,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
         </button>
 
         {/* Illustrations Book Modal Dialog (Centered on all screen sizes) */}
-        {isOpen && (
+        {isOpen && typeof document !== 'undefined' && createPortal(
           <div
             id="book-images-modal-backdrop"
             className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-fade-in"
@@ -577,12 +579,13 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               <span>Background generation keeps working as you turn pages.</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
 
       {/* Fullscreen Image Modal (for Fullscreen Reader Mode) */}
-      {fullscreenModalImage && (
+      {fullscreenModalImage && typeof document !== 'undefined' && createPortal(
         <div
           id="fullscreen-illustration-modal"
           onClick={handleCloseFullscreenModal}
@@ -685,7 +688,8 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
