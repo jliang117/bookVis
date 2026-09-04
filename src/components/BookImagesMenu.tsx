@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import {
   BookMarked,
   Loader2,
@@ -30,7 +29,6 @@ type SortOrder = 'asc' | 'desc';
 export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
   className = '',
   isFullscreenReader = false,
-  showLabel = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>('page');
@@ -76,7 +74,6 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       if (fullscreenModalImage) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest?.('#fullscreen-illustration-modal')) return;
-      if (target?.closest?.('#book-images-popover')) return;
 
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsOpen(false);
@@ -280,7 +277,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
         </button>
 
         {/* Illustrations Book Modal Dialog (Centered on all screen sizes) */}
-        {isOpen && typeof document !== 'undefined' && createPortal(
+        {isOpen && (
           <div
             id="book-images-modal-backdrop"
             className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-fade-in"
@@ -579,13 +576,12 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               <span>Background generation keeps working as you turn pages.</span>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
 
       {/* Fullscreen Image Modal (for Fullscreen Reader Mode) */}
-      {fullscreenModalImage && typeof document !== 'undefined' && createPortal(
+      {fullscreenModalImage && (
         <div
           id="fullscreen-illustration-modal"
           onClick={handleCloseFullscreenModal}
@@ -688,8 +684,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
               </div>
             </div>
           )}
-        </div>,
-        document.body
+        </div>
       )}
     </>
   );

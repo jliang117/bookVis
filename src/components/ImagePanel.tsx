@@ -217,7 +217,7 @@ export default function ImagePanel() {
             {isFullscreen ? 'Fullscreen' : 'Canvas'}
           </span>
           {/* Book / Leaflet menu right after title header (icon and count only) */}
-          <BookImagesMenu showLabel={false} />
+          <BookImagesMenu />
         </div>
         
         {/* Right side controls: Downloads + Cached image switcher + Regenerate button + Fullscreen */}
