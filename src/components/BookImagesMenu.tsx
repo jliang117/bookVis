@@ -281,7 +281,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
         {isOpen && (
           <div
             id="book-images-popover"
-            className="absolute left-0 mt-2 w-80 sm:w-96 bg-[#121212] border border-white/15 rounded-2xl shadow-2xl z-50 flex flex-col max-h-[520px] overflow-hidden animate-fade-in backdrop-blur-xl"
+            className={`absolute ${isFullscreenReader ? 'right-0' : 'left-0 sm:left-0'} mt-2 w-80 sm:w-96 max-w-[calc(100vw-1.5rem)] bg-[#121212] border border-white/15 rounded-2xl shadow-2xl z-50 flex flex-col max-h-[520px] overflow-hidden animate-fade-in backdrop-blur-xl`}
           >
             {/* Menu Header: Title "Illustrations Book" */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#161616]">
