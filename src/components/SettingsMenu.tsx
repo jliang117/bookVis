@@ -6,12 +6,13 @@ interface SettingsMenuProps {
   fullWidth?: boolean;
   showLabel?: boolean;
   className?: string;
+  openUp?: boolean;
 }
 
 const FONT_SIZE_STEPS = [50, 60, 75, 85, 100, 115, 125, 140, 150, 175, 200];
 const ZOOM_STEPS = [50, 60, 75, 85, 100, 115, 125, 140, 150, 175, 200];
 
-export default function SettingsMenu({ fullWidth = false, showLabel, className = '' }: SettingsMenuProps) {
+export default function SettingsMenu({ fullWidth = false, showLabel, className = '', openUp = false }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +100,7 @@ export default function SettingsMenu({ fullWidth = false, showLabel, className =
 
       {/* Settings Dropdown Popover */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto bg-[#141414] border border-white/15 rounded-2xl shadow-2xl p-4 z-50 backdrop-blur-xl animate-fade-in scrollbar-thin scrollbar-thumb-white/15 scrollbar-track-transparent">
+        <div className={`absolute right-0 ${openUp ? 'bottom-full mb-2' : 'top-full mt-2'} w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto bg-[#141414] border border-white/15 rounded-2xl shadow-2xl p-4 z-50 backdrop-blur-xl animate-fade-in scrollbar-thin scrollbar-thumb-white/15 scrollbar-track-transparent`}>
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
             <div className="flex items-center gap-2">

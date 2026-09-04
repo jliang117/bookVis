@@ -277,14 +277,24 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
           )}
         </button>
 
-        {/* Popover Dropdown Menu */}
+        {/* Illustrations Book Modal Dialog (Centered on all screen sizes) */}
         {isOpen && (
           <div
-            id="book-images-popover"
-            className={`absolute ${isFullscreenReader ? 'right-0' : 'left-0 sm:left-0'} mt-2 w-80 sm:w-96 max-w-[calc(100vw-1.5rem)] bg-[#121212] border border-white/15 rounded-2xl shadow-2xl z-50 flex flex-col max-h-[520px] overflow-hidden animate-fade-in backdrop-blur-xl`}
+            id="book-images-modal-backdrop"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setIsOpen(false);
+              }
+            }}
           >
-            {/* Menu Header: Title "Illustrations Book" */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#161616]">
+            <div
+              id="book-images-popover"
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-lg bg-[#121212] border border-white/15 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[600px] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            >
+              {/* Menu Header: Title "Illustrations Book" */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#161616] shrink-0">
               <div className="flex items-center gap-2">
                 <div className="relative flex items-center justify-center shrink-0">
                   <BookMarked className="w-4 h-4 text-indigo-400" />
@@ -563,12 +573,13 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
             </div>
 
             {/* Footer note */}
-            <div className="px-3.5 py-2 border-t border-white/5 bg-[#141414] text-[10px] text-slate-500 flex items-center justify-between">
+            <div className="px-3.5 py-2 border-t border-white/5 bg-[#141414] text-[10px] text-slate-500 flex items-center justify-between shrink-0">
               <span>Background generation keeps working as you turn pages.</span>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
 
       {/* Fullscreen Image Modal (for Fullscreen Reader Mode) */}
       {fullscreenModalImage && (

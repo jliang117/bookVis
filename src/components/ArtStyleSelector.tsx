@@ -27,9 +27,10 @@ const STYLES: ArtStyle[] = [
 interface ArtStyleSelectorProps {
   fullWidth?: boolean;
   className?: string;
+  openUp?: boolean;
 }
 
-export default function ArtStyleSelector({ fullWidth = false, className = '' }: ArtStyleSelectorProps) {
+export default function ArtStyleSelector({ fullWidth = false, className = '', openUp = false }: ArtStyleSelectorProps) {
   const selectedStyle = useAppStore((state) => state.selectedStyle);
   const setSelectedStyle = useAppStore((state) => state.setSelectedStyle);
   const [isOpen, setIsOpen] = useState(false);
@@ -56,13 +57,13 @@ export default function ArtStyleSelector({ fullWidth = false, className = '' }: 
       >
         <div className="flex items-center gap-1.5 min-w-0 truncate">
           <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
-          <span className="truncate max-w-[120px] sm:max-w-none text-xs sm:text-sm font-semibold sm:font-medium">{selectedStyle}</span>
+          <span className="truncate max-w-[85px] sm:max-w-none text-xs font-semibold sm:font-medium">{selectedStyle}</span>
         </div>
         <ChevronDown className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto bg-[#111111] border border-white/10 rounded-2xl shadow-2xl z-50 py-1.5 scrollbar-thin scrollbar-thumb-white/5">
+        <div className={`absolute right-0 ${openUp ? 'bottom-full mb-2' : 'top-full mt-2'} w-72 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto bg-[#111111] border border-white/10 rounded-2xl shadow-2xl z-50 py-1.5 scrollbar-thin scrollbar-thumb-white/5`}>
           <div className="px-3.5 py-1.5 border-b border-white/5 mb-1">
             <span className="text-[10px] font-bold text-slate-500 tracking-wider uppercase">
               Visual Rendering Styles

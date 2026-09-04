@@ -315,261 +315,159 @@ export default function ReaderPanel() {
       }
     >
       {/* Header Panel */}
-      <div className={`relative border-b border-white/10 bg-[#141414] z-30 ${
-        isFullscreen ? 'px-3 sm:px-6 py-2 sm:py-3 shadow-md' : 'px-3.5 sm:px-5 py-2.5 sm:py-3 border-white/5 flex items-center justify-between gap-2 sm:gap-3'
+      <div className={`relative border-b border-white/10 bg-[#141414] z-30 px-3.5 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 ${
+        isFullscreen ? 'shadow-md' : 'border-white/5'
       }`}>
-        {isFullscreen ? (
-          /* Fullscreen Header: 2 Rows on Mobile/Tablet for breathing room, single unified row on Desktop (lg+) */
-          <div className="flex flex-col gap-2 w-full">
-            {/* Row 1: Mobile Top Bar (Chapters, Book Title, Fullscreen Tag, and Exit) */}
-            <div className="flex items-center justify-between gap-2 w-full">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                {/* Hamburger Chapter Drawer Toggle */}
-                {chapters.length > 0 && (
-                  <button
-                    onClick={() => setIsChapterMenuOpen(!isChapterMenuOpen)}
-                    className={`p-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 ${
-                      isChapterMenuOpen
-                        ? 'bg-indigo-600 border-indigo-500 text-white'
-                        : 'bg-[#1a1a1a] hover:bg-[#242424] border-white/10 text-slate-300 hover:text-white'
-                    }`}
-                    title="Select Chapter / Act (Table of Contents)"
-                    aria-label="Table of Contents"
-                  >
-                    <Menu className="w-4 h-4" />
-                    <span className="hidden xs:inline text-[11px] font-medium">Chapters</span>
-                  </button>
-                )}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Hamburger Chapter Drawer Toggle */}
+          {chapters.length > 0 && (
+            <button
+              onClick={() => setIsChapterMenuOpen(!isChapterMenuOpen)}
+              className={`p-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 ${
+                isChapterMenuOpen
+                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  : 'bg-[#1a1a1a] hover:bg-[#242424] border-white/10 text-slate-300 hover:text-white'
+              }`}
+              title="Select Chapter / Act (Table of Contents)"
+              aria-label="Table of Contents"
+            >
+              <Menu className="w-4 h-4" />
+              <span className="hidden md:inline text-[11px] font-medium">Chapters</span>
+            </button>
+          )}
 
-                <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
-                  <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
-                  <span className="text-xs sm:text-sm font-bold text-slate-200 truncate" title={fileName || ''}>
-                    {fileName || 'Reading Material'}
-                  </span>
-                  <span className="hidden sm:inline text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider shrink-0">
-                    Fullscreen
-                  </span>
-                </div>
-              </div>
+          <div className="flex items-center gap-1.5 truncate max-w-[130px] sm:max-w-[200px] md:max-w-xs">
+            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-slate-200 truncate" title={fileName || ''}>
+              {fileName || 'Reading Material'}
+            </span>
+            {isFullscreen && (
+              <span className="hidden sm:inline text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider shrink-0">
+                Fullscreen
+              </span>
+            )}
+          </div>
 
-              {/* Exit Fullscreen Button */}
+          {/* Debounced Simple Text Search */}
+          <div className="relative flex items-center w-full min-w-[95px] sm:min-w-[150px] max-w-[200px] ml-1">
+            <Search
+              className={`absolute left-2.5 w-3.5 h-3.5 pointer-events-none transition-colors ${
+                isSearching ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
+              }`}
+            />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-7 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
+            />
+            {searchQuery && (
               <button
-                onClick={toggleFullscreen}
-                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#242424] text-slate-200 hover:text-white border border-white/15 hover:border-white/30 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer shrink-0 shadow-sm"
-                title="Exit Fullscreen (Esc)"
-                aria-label="Exit Fullscreen"
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setDebouncedQuery('');
+                }}
+                className="absolute right-2 p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                title="Clear search"
               >
-                <Minimize2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Exit</span>
+                <X className="w-3.5 h-3.5" />
               </button>
-            </div>
+            )}
+          </div>
 
-            {/* Row 2: Visualizer Studio & Search Action Ribbon */}
-            <div className="flex items-center justify-between gap-1.5 sm:gap-2 w-full pt-1 border-t border-white/5 lg:border-t-0 lg:pt-0">
-              {/* Search Box with matches */}
-              <div className="flex items-center gap-1.5 flex-1 min-w-[120px] max-w-[260px]">
-                <div className="relative flex items-center w-full">
-                  <Search
-                    className={`absolute left-2.5 w-3.5 h-3.5 pointer-events-none transition-colors ${
-                      isSearching ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
-                    }`}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-7 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setDebouncedQuery('');
-                      }}
-                      className="absolute right-2 p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
-                      title="Clear search"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+          {/* Search Result Counter & Prev/Next Match Stepper */}
+          {debouncedQuery && (
+            <div className="hidden sm:flex items-center gap-1 shrink-0">
+              {searchResults.length > 0 ? (
+                <div className="flex items-center gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-2 py-1 text-[11px] font-mono text-slate-300">
+                  <span className="text-indigo-300 font-semibold">
+                    {currentMatchIndex + 1}/{searchResults.length}
+                  </span>
+                  <span className="text-slate-500 text-[10px] hidden md:inline">pages</span>
+
+                  {searchResults.length > 1 && (
+                    <div className="flex items-center gap-0.5 ml-1 border-l border-white/10 pl-1">
+                      <button
+                        type="button"
+                        onClick={handlePrevMatch}
+                        className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
+                        title="Previous matching page"
+                        aria-label="Previous matching page"
+                      >
+                        <ChevronLeft className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNextMatch}
+                        className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
+                        title="Next matching page"
+                        aria-label="Next matching page"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
-
-                {/* Match Stepper */}
-                {debouncedQuery && searchResults.length > 0 && (
-                  <div className="hidden sm:flex items-center gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-2 py-1 text-[11px] font-mono text-slate-300 shrink-0">
-                    <span className="text-indigo-300 font-semibold">
-                      {currentMatchIndex + 1}/{searchResults.length}
-                    </span>
-                    {searchResults.length > 1 && (
-                      <div className="flex items-center gap-0.5 ml-1 border-l border-white/10 pl-1">
-                        <button
-                          type="button"
-                          onClick={handlePrevMatch}
-                          className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
-                          title="Previous matching page"
-                          aria-label="Previous matching page"
-                        >
-                          <ChevronLeft className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleNextMatch}
-                          className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
-                          title="Next matching page"
-                          aria-label="Next matching page"
-                        >
-                          <ChevronRight className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Action Tools Cluster: Generate, Book Illustrations, Art Style, Settings */}
-              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                {/* 1. Generate button */}
-                <button
-                  id="fullscreen-generate-button"
-                  onClick={() => generateVisualization(true, currentPage, selectedStyle)}
-                  disabled={isCurrentPageGenerating}
-                  className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/30 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
-                  title="Generate illustration for current scene in background while reading"
-                >
-                  {isCurrentPageGenerating ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-200" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  )}
-                  <span className="hidden xs:inline">{isCurrentPageGenerating ? 'Generating...' : 'Generate'}</span>
-                </button>
-
-                {/* 2. Book Illustrations Menu */}
-                <BookImagesMenu isFullscreenReader={true} />
-
-                {/* 3. Art Style Selector */}
-                <ArtStyleSelector className="py-1.5 text-xs" />
-
-                {/* 4. Settings */}
-                <SettingsMenu className="py-1.5" />
-              </div>
+              ) : (
+                !isSearching && (
+                  <span className="text-[10px] text-rose-300 bg-rose-950/40 border border-rose-500/20 px-2 py-1 rounded-xl shrink-0 font-medium">
+                    No matches
+                  </span>
+                )
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Right side controls */}
+        {isFullscreen ? (
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Desktop Action Cluster (lg+) */}
+            <div className="hidden lg:flex items-center gap-2">
+              <button
+                id="fullscreen-generate-button"
+                onClick={() => generateVisualization(true, currentPage, selectedStyle)}
+                disabled={isCurrentPageGenerating}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/30 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
+                title="Generate illustration for current scene in background while reading"
+              >
+                {isCurrentPageGenerating ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-200" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                )}
+                <span>{isCurrentPageGenerating ? 'Generating...' : 'Generate'}</span>
+              </button>
+
+              <BookImagesMenu isFullscreenReader={true} />
+              <ArtStyleSelector className="py-1.5 text-xs" />
+              <SettingsMenu className="py-1.5" />
+            </div>
+
+            {/* Exit Fullscreen Button */}
+            <button
+              onClick={toggleFullscreen}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#242424] text-slate-200 hover:text-white border border-white/15 hover:border-white/30 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer shrink-0 shadow-sm"
+              title="Exit Fullscreen (Esc)"
+              aria-label="Exit Fullscreen"
+            >
+              <Minimize2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Exit</span>
+            </button>
           </div>
         ) : (
-          /* Normal mode: Single Clean Row */
-          <>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {/* Hamburger Chapter Drawer Toggle */}
-              {chapters.length > 0 && (
-                <button
-                  onClick={() => setIsChapterMenuOpen(!isChapterMenuOpen)}
-                  className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 ${
-                    isChapterMenuOpen
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-[#1a1a1a] hover:bg-[#242424] border-white/10 text-slate-300 hover:text-white'
-                  }`}
-                  title="Select Chapter / Act (Table of Contents)"
-                  aria-label="Table of Contents"
-                >
-                  <Menu className="w-4 h-4" />
-                  <span className="hidden md:inline text-[11px] font-medium">Chapters</span>
-                </button>
-              )}
-
-              <div className="flex items-center gap-1.5 truncate max-w-[140px] sm:max-w-[200px] md:max-w-xs">
-                <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-slate-200 truncate" title={fileName || ''}>
-                  {fileName || 'Reading Material'}
-                </span>
-              </div>
-
-              {/* Debounced Simple Text Search */}
-              <div className="relative flex items-center w-full min-w-[110px] sm:min-w-[160px] max-w-[200px] ml-1">
-                <Search
-                  className={`absolute left-2.5 w-3.5 h-3.5 pointer-events-none transition-colors ${
-                    isSearching ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
-                  }`}
-                />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-7 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setDebouncedQuery('');
-                    }}
-                    className="absolute right-2 p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
-                    title="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Search Result Counter & Prev/Next Match Stepper */}
-              {debouncedQuery && (
-                <div className="hidden sm:flex items-center gap-1 shrink-0">
-                  {searchResults.length > 0 ? (
-                    <div className="flex items-center gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-2 py-1 text-[11px] font-mono text-slate-300">
-                      <span className="text-indigo-300 font-semibold">
-                        {currentMatchIndex + 1}/{searchResults.length}
-                      </span>
-                      <span className="text-slate-500 text-[10px] hidden md:inline">pages</span>
-
-                      {searchResults.length > 1 && (
-                        <div className="flex items-center gap-0.5 ml-1 border-l border-white/10 pl-1">
-                          <button
-                            type="button"
-                            onClick={handlePrevMatch}
-                            className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
-                            title="Previous matching page"
-                            aria-label="Previous matching page"
-                          >
-                            <ChevronLeft className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleNextMatch}
-                            className="p-0.5 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
-                            title="Next matching page"
-                            aria-label="Next matching page"
-                          >
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    !isSearching && (
-                      <span className="text-[10px] text-rose-300 bg-rose-950/40 border border-rose-500/20 px-2 py-1 rounded-xl shrink-0 font-medium">
-                        No matches
-                      </span>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Normal mode: Fullscreen trigger button */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={toggleFullscreen}
-                className="p-1.5 sm:px-2 sm:py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#1a1a1a] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer flex items-center justify-center shrink-0"
-                title="Fullscreen Reader"
-                aria-label="Fullscreen Reader"
-              >
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
-              </button>
-            </div>
-          </>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={toggleFullscreen}
+              className="p-1.5 sm:px-2 sm:py-1 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 hover:border-white/25 rounded-lg bg-[#1a1a1a] hover:bg-[#222222] transition-all hover:shadow-md cursor-pointer flex items-center justify-center shrink-0"
+              title="Fullscreen Reader"
+              aria-label="Fullscreen Reader"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -577,7 +475,7 @@ export default function ReaderPanel() {
       {isChapterMenuOpen && chapters.length > 0 && (
         <div
           ref={chapterMenuRef}
-          className={`absolute ${isFullscreen ? 'top-[96px]' : 'top-[49px]'} left-3 sm:left-4 z-40 w-80 max-w-[calc(100%-1.5rem)] max-h-[420px] bg-[#161616] border border-white/15 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-150`}
+          className="absolute top-[52px] sm:top-[56px] left-3 sm:left-4 z-40 w-80 max-w-[calc(100%-1.5rem)] max-h-[420px] bg-[#161616] border border-white/15 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {/* Menu Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#1a1a1a]">
@@ -650,7 +548,7 @@ export default function ReaderPanel() {
           ref={stageContainerRef} 
           className={`flex-1 flex items-center justify-center p-3 sm:p-5 px-12 sm:px-16 bg-[#0d0d0d] overflow-auto ${
             isFullscreen 
-              ? 'h-[calc(100vh-130px)] max-h-none' 
+              ? 'h-[calc(100vh-56px)] max-h-none pb-24 lg:pb-6' 
               : 'min-h-[420px] max-h-[700px] lg:max-h-[calc(100vh-220px)]'
           }`}
         >
@@ -685,7 +583,7 @@ export default function ReaderPanel() {
                   <div 
                     ref={textContainerRef} 
                     className={`overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent ${
-                      isFullscreen ? 'max-h-[calc(100vh-230px)]' : 'max-h-[480px] lg:max-h-[calc(100vh-320px)]'
+                      isFullscreen ? 'max-h-[calc(100vh-180px)] pb-14 lg:pb-2' : 'max-h-[480px] lg:max-h-[calc(100vh-320px)]'
                     }`}
                   >
                     <p 
@@ -717,10 +615,43 @@ export default function ReaderPanel() {
             <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-slate-200" />
           </button>
         )}
+
+        {/* Option B: Mobile Fullscreen Floating Bottom Action Dock (Thumb-reachable toolbar) */}
+        {isFullscreen && (
+          <div
+            id="mobile-fullscreen-bottom-dock"
+            className="lg:hidden fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 bg-[#141414]/95 border border-white/15 rounded-2xl shadow-2xl backdrop-blur-xl max-w-[calc(100vw-1.5rem)]"
+          >
+            {/* Generate Scene Action */}
+            <button
+              id="mobile-fullscreen-generate-button"
+              onClick={() => generateVisualization(true, currentPage, selectedStyle)}
+              disabled={isCurrentPageGenerating}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white border border-indigo-500/30 rounded-xl text-xs font-semibold shadow-md shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer shrink-0"
+              title="Generate illustration for current scene in background while reading"
+            >
+              {isCurrentPageGenerating ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-200" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              )}
+              <span>{isCurrentPageGenerating ? 'Generating...' : 'Generate'}</span>
+            </button>
+
+            {/* Illustrations Book Menu */}
+            <BookImagesMenu isFullscreenReader={true} />
+
+            {/* Art Style Selector (opens upward) */}
+            <ArtStyleSelector className="py-1.5 text-xs" openUp={true} />
+
+            {/* Settings Menu (opens upward) */}
+            <SettingsMenu className="py-1.5" openUp={true} />
+          </div>
+        )}
       </div>
 
       {/* Navigation Controls footer */}
-      {totalPages > 1 && (
+      {totalPages > 1 && !isFullscreen && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-white/5 bg-[#141414]">
           {/* Navigation Arrows */}
           <div className="flex items-center gap-2 shrink-0">
