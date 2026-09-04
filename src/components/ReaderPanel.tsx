@@ -336,22 +336,22 @@ export default function ReaderPanel() {
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 truncate max-w-[130px] sm:max-w-[200px] md:max-w-xs">
+          <div className="flex items-center gap-1.5 truncate min-w-0 max-w-[90px] xs:max-w-[120px] sm:max-w-[180px] md:max-w-xs">
             <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
             <span className="text-xs sm:text-sm font-bold text-slate-200 truncate" title={fileName || ''}>
               {fileName || 'Reading Material'}
             </span>
             {isFullscreen && (
-              <span className="hidden sm:inline text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider shrink-0">
+              <span className="hidden md:inline text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider shrink-0">
                 Fullscreen
               </span>
             )}
           </div>
 
-          {/* Debounced Simple Text Search */}
-          <div className="relative flex items-center w-full min-w-[95px] sm:min-w-[150px] max-w-[200px] ml-1">
+          {/* Debounced Simple Text Search (compact length to fit header controls cleanly) */}
+          <div className="relative flex items-center w-full min-w-[70px] sm:min-w-[100px] md:min-w-[130px] max-w-[95px] xs:max-w-[120px] sm:max-w-[140px] md:max-w-[160px] ml-0.5 sm:ml-1">
             <Search
-              className={`absolute left-2.5 w-3.5 h-3.5 pointer-events-none transition-colors ${
+              className={`absolute left-2 w-3.5 h-3.5 pointer-events-none transition-colors ${
                 isSearching ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
               }`}
             />
@@ -360,7 +360,7 @@ export default function ReaderPanel() {
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-7 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
+              className="w-full pl-7 pr-6 py-1 bg-[#1a1a1a] hover:bg-[#202020] focus:bg-[#202020] border border-white/10 hover:border-white/20 focus:border-indigo-500/60 focus:outline-none rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 transition-all"
             />
             {searchQuery && (
               <button
@@ -369,7 +369,7 @@ export default function ReaderPanel() {
                   setSearchQuery('');
                   setDebouncedQuery('');
                 }}
-                className="absolute right-2 p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                className="absolute right-1.5 p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
                 title="Clear search"
               >
                 <X className="w-3.5 h-3.5" />
@@ -423,7 +423,7 @@ export default function ReaderPanel() {
 
         {/* Right side controls */}
         {isFullscreen ? (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Desktop Action Cluster (lg+) */}
             <div className="hidden lg:flex items-center gap-2">
               <button
@@ -441,10 +441,12 @@ export default function ReaderPanel() {
                 <span>{isCurrentPageGenerating ? 'Generating...' : 'Generate'}</span>
               </button>
 
-              <BookImagesMenu isFullscreenReader={true} />
               <ArtStyleSelector className="py-1.5 text-xs" />
               <SettingsMenu className="py-1.5" />
             </div>
+
+            {/* Book Illustrations Menu (In top header for all screen sizes) */}
+            <BookImagesMenu />
 
             {/* Exit Fullscreen Button */}
             <button
@@ -637,9 +639,6 @@ export default function ReaderPanel() {
               )}
               <span>{isCurrentPageGenerating ? 'Generating...' : 'Generate'}</span>
             </button>
-
-            {/* Illustrations Book Menu */}
-            <BookImagesMenu/>
 
             {/* Art Style Selector (opens upward) */}
             <ArtStyleSelector className="py-1.5 text-xs" openUp={true} />

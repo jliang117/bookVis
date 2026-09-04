@@ -74,6 +74,8 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       if (fullscreenModalImage) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest?.('#fullscreen-illustration-modal')) return;
+      if (target?.closest?.('#book-images-popover')) return;
+      if (target?.closest?.('#book-images-menu-button')) return;
 
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsOpen(false);
@@ -275,18 +277,19 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
             </span>
           )}
         </button>
+      </div>
 
-        {/* Illustrations Book Modal Dialog (Centered on all screen sizes) */}
-        {isOpen && (
-          <div
-            id="book-images-modal-backdrop"
-            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-fade-in"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsOpen(false);
-              }
-            }}
-          >
+      {/* Illustrations Book Modal Dialog */}
+      {isOpen && (
+        <div
+          id="book-images-modal-backdrop"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsOpen(false);
+            }
+          }}
+        >
             <div
               id="book-images-popover"
               onClick={(e) => e.stopPropagation()}
@@ -578,7 +581,6 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
           </div>
         </div>
       )}
-    </div>
 
       {/* Fullscreen Image Modal (for Fullscreen Reader Mode) */}
       {fullscreenModalImage && (
