@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { Upload, FileText, Loader2, AlertCircle, Sparkles, Type, BookOpen } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertCircle, Sparkles, Type, BookOpen, Key, Check } from 'lucide-react';
 import { useAppStore } from '../lib/store';
 import { parseEpub } from '../lib/epubParser';
 
@@ -12,10 +12,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const SAMPLE_EXCERPT = `The ancient library was carved directly into the petrified roots of the Great Willow. Shafts of amber sunlight filtered down through emerald glass skylights, illuminating swirling motes of dust and towering shelves packed with leather-bound grimoires. At the center of the moss-carpeted chamber, a brass astrolabe rotated silently, casting intricate geometric shadows across the cobblestone floor where young scholar Dennis stood in awe, clutching a glowing sapphire crystal.`;
 
-export default function PdfUploader() {
+interface PdfUploaderProps {
+  onOpenApiKeys?: () => void;
+}
+
+export default function PdfUploader({ onOpenApiKeys }: PdfUploaderProps) {
   const setPageTexts = useAppStore((state) => state.setPageTexts);
   const setDocumentType = useAppStore((state) => state.setDocumentType);
   const generateVisualization = useAppStore((state) => state.generateVisualization);
+  const apiKeys = useAppStore((state) => state.apiKeys);
+  const hasGeminiKey = Boolean(apiKeys?.gemini && apiKeys.gemini.trim().length > 0);
+
   const [mode, setMode] = useState<'file' | 'text'>('file');
   const [directText, setDirectText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -148,6 +155,85 @@ export default function PdfUploader() {
         <p className="text-slate-400 text-sm max-w-lg mx-auto">
           Transform your books and scene descriptions into AI-illustrated visual companions dynamically.
         </p>
+      </div>
+
+      {/* Step-by-Step Workflow Guide with Step 1: Add API Key */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        {/* Step 1: Add an API Key (Interactive - Opens Keys Modal) */}
+        <button
+          type="button"
+          id="landing-step-one-button"
+          onClick={onOpenApiKeys}
+          className="group flex flex-col items-start text-left p-3.5 rounded-2xl bg-[#141414] hover:bg-[#181818] border border-white/10 hover:border-indigo-500/50 transition-all cursor-pointer shadow-sm hover:shadow-indigo-950/20 active:scale-[0.98]"
+        >
+          <div className="flex items-center justify-between w-full mb-2">
+            <div className="flex items-center gap-1.5">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-400 text-[11px] font-mono font-bold border border-indigo-500/30">
+                1
+              </span>
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                Step 1
+              </span>
+            </div>
+            {hasGeminiKey ? (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium">
+                <Check className="w-3 h-3" />
+                Configured
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium">
+                Add Key
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200 group-hover:text-white mb-1">
+            <Key className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <span>Add an API Key</span>
+          </div>
+          <p className="text-[11px] text-slate-400 group-hover:text-slate-300 leading-snug">
+            {hasGeminiKey
+              ? 'Gemini key active. Click to manage or change credentials.'
+              : 'Add your Gemini API key to power visualizations. Click to configure.'}
+          </p>
+        </button>
+
+        {/* Step 2: Upload Book or Scene */}
+        <div className="flex flex-col items-start p-3.5 rounded-2xl bg-[#121212] border border-white/5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-white/5 text-slate-400 text-[11px] font-mono font-bold border border-white/10">
+              2
+            </span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Step 2
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-1">
+            <Upload className="w-3.5 h-3.5 text-slate-400" />
+            <span>Upload or Paste</span>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-snug">
+            Upload an EPUB/PDF ebook or paste a story excerpt below.
+          </p>
+        </div>
+
+        {/* Step 3: Read & Visualize */}
+        <div className="flex flex-col items-start p-3.5 rounded-2xl bg-[#121212] border border-white/5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-white/5 text-slate-400 text-[11px] font-mono font-bold border border-white/10">
+              3
+            </span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Step 3
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400/80" />
+            <span>Read & Visualize</span>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-snug">
+            Turn pages with arrow keys (←/→) and generate live AI artwork.
+          </p>
+        </div>
       </div>
 
       {/* Mode Toggle Bar */}

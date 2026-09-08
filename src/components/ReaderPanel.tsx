@@ -256,6 +256,45 @@ export default function ReaderPanel() {
     }
   };
 
+  // Enable reader back and forward buttons navigation via Left and Right arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept arrow keys if user is typing in an input, textarea, select, or contentEditable element
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Don't intercept if an open modal or dialog is present
+      if (document.querySelector('[role="dialog"]')) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        if (currentPage > 1) {
+          e.preventDefault();
+          handlePrevPage();
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (currentPage < totalPages) {
+          e.preventDefault();
+          handleNextPage();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentPage, totalPages]);
+
   const handleJumpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = parseInt(jumpPage, 10);
@@ -446,7 +485,7 @@ export default function ReaderPanel() {
             </div>
 
             {/* Book Illustrations Menu (In top header for all screen sizes) */}
-            <BookImagesMenu />
+            <BookImagesMenu isFullscreenReader={true} />
 
             {/* Exit Fullscreen Button */}
             <button
@@ -538,8 +577,8 @@ export default function ReaderPanel() {
             onClick={handlePrevPage}
             disabled={currentPage <= 1}
             className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 p-2.5 sm:p-3 rounded-2xl border border-white/15 bg-[#161616]/95 hover:bg-[#222222] hover:border-white/30 disabled:opacity-20 disabled:pointer-events-none text-slate-300 hover:text-white shadow-2xl backdrop-blur-md transition-all active:scale-90 shrink-0 cursor-pointer"
-            title="Previous Page"
-            aria-label="Previous Page"
+            title="Previous Page (Left Arrow ←)"
+            aria-label="Previous Page (Left Arrow)"
           >
             <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-slate-200" />
           </button>
@@ -611,13 +650,13 @@ export default function ReaderPanel() {
             onClick={handleNextPage}
             disabled={currentPage >= totalPages}
             className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-2.5 sm:p-3 rounded-2xl border border-white/15 bg-[#161616]/95 hover:bg-[#222222] hover:border-white/30 disabled:opacity-20 disabled:pointer-events-none text-slate-300 hover:text-white shadow-2xl backdrop-blur-md transition-all active:scale-90 shrink-0 cursor-pointer"
-            title="Next Page"
-            aria-label="Next Page"
+            title="Next Page (Right Arrow →)"
+            aria-label="Next Page (Right Arrow)"
           >
             <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-slate-200" />
           </button>
         )}
-
+ 
         {/* Option B: Mobile Fullscreen Floating Bottom Action Dock (Thumb-reachable toolbar) */}
         {isFullscreen && (
           <div
@@ -658,7 +697,8 @@ export default function ReaderPanel() {
               onClick={handlePrevPage}
               disabled={currentPage <= 1}
               className="flex items-center justify-center p-2 rounded-xl border border-white/10 bg-[#161616] hover:bg-[#222222] hover:border-white/20 disabled:opacity-20 disabled:hover:bg-[#161616] text-slate-300 transition-colors cursor-pointer"
-              title="Previous Page"
+              title="Previous Page (Left Arrow ←)"
+              aria-label="Previous Page (Left Arrow)"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -669,7 +709,8 @@ export default function ReaderPanel() {
               onClick={handleNextPage}
               disabled={currentPage >= totalPages}
               className="flex items-center justify-center p-2 rounded-xl border border-white/10 bg-[#161616] hover:bg-[#222222] hover:border-white/20 disabled:opacity-20 disabled:hover:bg-[#161616] text-slate-300 transition-colors cursor-pointer"
-              title="Next Page"
+              title="Next Page (Right Arrow →)"
+              aria-label="Next Page (Right Arrow)"
             >
               <ChevronRight className="w-5 h-5" />
             </button>

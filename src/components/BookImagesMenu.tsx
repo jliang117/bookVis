@@ -55,7 +55,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       e.stopPropagation();
     }
     setFullscreenModalImage(null);
-    if (isFullscreenReader) {
+    if (isFullscreenReader || (typeof document !== 'undefined' && Boolean(document.fullscreenElement))) {
       setIsOpen(true);
     }
   };
@@ -147,7 +147,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
 
   const handleSelectImage = (item: CacheEntry) => {
     selectBookImage(item);
-    if (isFullscreenReader) {
+    if (isFullscreenReader || (typeof document !== 'undefined' && Boolean(document.fullscreenElement))) {
       setFullscreenModalImage(item);
     } else {
       setIsOpen(false);
@@ -543,7 +543,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
                             </div>
                           </div>
 
-                          {/* Actions: Download individual card + Optional Fullscreen modal button */}
+                          {/* Actions: Download individual card + Fullscreen image modal button */}
                           <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={(e) => handleDownloadCardImage(e, item)}
@@ -554,17 +554,16 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
                               <Download className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* Fullscreen Reader Mode Only: Button to view in fullscreen/large modal */}
-                            {isFullscreenReader && (
-                              <button
-                                onClick={(e) => handleOpenFullscreenImage(e, item)}
-                                className="p-2 rounded-lg bg-white/5 hover:bg-indigo-600 border border-white/10 hover:border-indigo-500 text-slate-300 hover:text-white transition-all cursor-pointer shrink-0 shadow-sm"
-                                title="View this illustration in Fullscreen Modal"
-                                aria-label="View illustration in fullscreen"
-                              >
-                                <Maximize2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                            {/* Button to view illustration in Fullscreen Modal */}
+                            <button
+                              id={`open-fullscreen-image-${item.currentPage}`}
+                              onClick={(e) => handleOpenFullscreenImage(e, item)}
+                              className="p-2 rounded-lg bg-white/5 hover:bg-indigo-600 border border-white/10 hover:border-indigo-500 text-slate-300 hover:text-white transition-all cursor-pointer shrink-0 shadow-sm"
+                              title="View this illustration in Fullscreen Modal"
+                              aria-label="View illustration in fullscreen"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       );
@@ -583,7 +582,7 @@ export const BookImagesMenu: React.FC<BookImagesMenuProps> = ({
       )}
 
       {/* Fullscreen Image Modal (for Fullscreen Reader Mode) */}
-      {fullscreenModalImage && (
+      {fullscreenModalImage && typeof document !== 'undefined' && (
         <div
           id="fullscreen-illustration-modal"
           onClick={handleCloseFullscreenModal}

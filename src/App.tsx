@@ -187,7 +187,7 @@ export default function App() {
             transition={{ duration: 0.3 }}
             className="w-full flex justify-center py-12"
           >
-            <PdfUploader />
+            <PdfUploader onOpenApiKeys={() => setIsApiKeysOpen(true)} />
           </motion.div>
         ) : (
           // READING & GENERATING WORKFLOW
